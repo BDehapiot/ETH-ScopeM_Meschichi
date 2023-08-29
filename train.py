@@ -1,5 +1,6 @@
 #%% Imports -------------------------------------------------------------------
 
+import nd2
 import napari
 import random
 import numpy as np
@@ -90,26 +91,30 @@ test = model.train(
     )
 
 #%% Predict -------------------------------------------------------------------
-
+      
 # Open prediction images
 prd_images = []
-prd_path = Path('D:\\local_Meschichi\\data\\train\\stock')
-for path in prd_path.iterdir():
-    if path.suffix == '.tif':
-        prd_images.append(io.imread(path))
+stack_name = 'KASind1.nd2'
+prd_path = Path('D:\\local_Meschichi\\data')
+stack = nd2.imread(Path(prd_path) / stack_name).squeeze()
+for z in stack:
+    prd_images.append(z)
 
 # Predict
 prd_data = model.eval(
     prd_images,
     channels=[0,0], 
     normalize=False,
+    anisotropy=5.47,
     )
 
 # Display 
 prd_images = np.stack(prd_images)
 prd_labels = np.stack([data for data in prd_data[0]])
+prd_mask = prd_labels > 0
 prd_probs = np.stack([data[2] for data in prd_data[1]])
 viewer = napari.Viewer()
-viewer.add_image(prd_images)
-viewer.add_labels(prd_labels)
-viewer.add_image(prd_probs)
+viewer.add_image(prd_images, scale=[5.47, 1, 1])
+viewer.add_labels(prd_labels, scale=[5.47, 1, 1])
+viewer.add_labels(prd_mask, scale=[5.47, 1, 1])
+viewer.add_image(prd_probs, scale=[5.47, 1, 1])
