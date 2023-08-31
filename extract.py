@@ -1,16 +1,19 @@
 #%% Imports -------------------------------------------------------------------
 
 import nd2
-import random
 from skimage import io
 from pathlib import Path
+import random 
 
-random.seed(42) 
+#%% Parameters ----------------------------------------------------------------
 
-#%% Initialize ----------------------------------------------------------------
+random.seed(44)
 
-data_path = Path('D:\\local_Meschichi\\data')
-train_path = Path('D:\\local_Meschichi\\data\\train')
+# Paths
+data_path = Path('D:/local_Meschichi/data')
+stock_path = Path(Path.cwd(), 'data', 'stock') 
+
+#%% Extract -------------------------------------------------------------------
 
 for stack_path in data_path.iterdir():
     if stack_path.suffix == '.nd2':
@@ -24,9 +27,7 @@ for stack_path in data_path.iterdir():
         z_plane = stack[z_rand,...]
         
         # save extracted z_plane
-        z_plane_name = f'{stack_name}_z{z_rand}.tif'        
         io.imsave(
-            Path(train_path, z_plane_name),
-            z_plane,
-            check_contrast=False,
+            Path(stock_path, f'{stack_name}_z{z_rand}.tif'),
+            z_plane, check_contrast=False,
             )

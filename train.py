@@ -8,21 +8,27 @@ from skimage import io
 from pathlib import Path
 import albumentations as A
 import matplotlib.pyplot as plt
+import segmentation_models as sm
 from joblib import Parallel, delayed 
-
-from cellpose import models
-from cellpose.io import imread
-from cellpose.io import logger_setup
-logger_setup();
-
-random.seed(42) 
+from skimage.transform import rescale
 
 #%% Parameters ----------------------------------------------------------------
 
-val_split = 0.25
+random.seed(42) 
+
+# Paths
+data_path = Path(Path.cwd(), 'data')
+train_path = Path(data_path, 'train') 
+
+# Training
+rescale_factor = 0.5
+validation_split = 0.2
+n_epochs = 30
+batch_size = 8
 
 # Data augmentation
-iterations = 64
+iterations = 60
+augment = True if iterations > 0 else False
 operations = A.Compose([
     A.VerticalFlip(p=0.5),              
     A.RandomRotate90(p=0.5),
@@ -31,90 +37,123 @@ operations = A.Compose([
     A.GridDistortion(p=0.5),
     ])
 
-#%%
+#%% Prepare data --------------------------------------------------------------
 
 # Open training data
-trn_path = Path('D:\\local_Meschichi\\data\\train')
-images, masks = [], []
-for path in trn_path.iterdir():
+train_images, train_masks = [], []
+for path in train_path.iterdir():
     if 'mask' in path.name:
+        
+        # Get paths
         mask_path = str(path)
         image_path = mask_path.replace('_mask', '')
-        images.append(io.imread(image_path))
-        masks.append(io.imread(mask_path))
         
-# # Display 
-# viewer = napari.Viewer()
-# viewer.add_image(np.stack(images))
-# viewer.add_labels(np.stack(masks))
-        
-# Augment data
-def augment_data(images, masks, operations):      
-    idx = random.randint(0, len(images) - 1)
-    outputs = operations(image=images[idx], mask=masks[idx])
-    return outputs['image'], outputs['mask']
-outputs = Parallel(n_jobs=-1)(
-    delayed(augment_data)(images, masks, operations)
-    for i in range(iterations)
-    ) 
+        # Open data
+        image = io.imread(image_path)
+        mask = io.imread(mask_path) > 0
 
-# Split data  
-trn_images, trn_masks, trn_paths = [], [], []
-val_images, val_masks, val_paths = [], [], []
-for i, (image, mask) in enumerate(outputs):
-    if i >= iterations * val_split:
-        trn_images.append(np.array(image))
-        trn_masks.append(np.array(mask))
-    else:
-        val_images.append(np.array(image))
-        val_masks.append(np.array(mask))
+        # Open & rescale data
+        image = rescale(image, rescale_factor, preserve_range=True)
+        mask = rescale(mask, rescale_factor, preserve_range=True)
+        
+        # Append train_images & train_masks lists
+        train_images.append(image)
+        train_masks.append(mask)
+                
+# Format training data
+train_images = np.stack(train_images)
+train_masks = np.stack(train_masks).astype('uint8')
+pMax = np.percentile(train_images, 99.9)
+train_images[train_images > pMax] = pMax
+train_images = ((train_images / pMax)*255).astype('uint8')
 
 # # Display 
 # viewer = napari.Viewer()
-# viewer.add_image(np.stack(trn_images))
-# viewer.add_labels(np.stack(trn_masks))
+# viewer.add_image(train_images)
+# viewer.add_image(train_masks)
+       
+# -----------------------------------------------------------------------------
 
-#%% Train ---------------------------------------------------------------------
+if augment:
 
-model = models.CellposeModel(gpu=True, model_type='nuclei')
-test = model.train(
-    train_data=trn_images, 
-    train_labels=trn_masks, 
-    test_data=val_images, 
-    test_labels=val_masks, 
-    channels=[0,0], 
-    normalize=False,
-    save_path='D:\\local_Meschichi\\data\\train\\',
-    n_epochs=50,
-    min_train_masks=1,
-    model_name='current',
+    # Augment data
+    def augment_data(train_images, train_masks, operations):      
+        idx = random.randint(0, len(train_images) - 1)
+        outputs = operations(image=train_images[idx,...], mask=train_masks[idx,...])
+        return outputs['image'], outputs['mask']
+    outputs = Parallel(n_jobs=-1)(
+        delayed(augment_data)(train_images, train_masks, operations)
+        for i in range(iterations)
+        )
+    train_images = np.stack([data[0] for data in outputs])
+    train_masks = np.stack([data[1] for data in outputs])
+    
+    # # Display 
+    # viewer = napari.Viewer()
+    # viewer.add_image(train_images)
+    # viewer.add_labels(train_masks)                    
+
+#%% Train model ---------------------------------------------------------------
+
+from tensorflow.keras.utils import normalize
+train_images = normalize(train_images)
+
+print(np.max(train_images))
+
+# Define & compile model
+preprocess_input = sm.get_preprocessing('resnet34')
+model = sm.Unet(
+    'resnet34', 
+    input_shape=(None, None, 1), 
+    classes=1, 
+    activation='sigmoid', 
+    encoder_weights=None,
     )
+model.compile(
+    'Adam',
+    loss=sm.losses.bce_jaccard_loss,
+    metrics=[sm.metrics.iou_score],
+    )
+
+# Train model
+history = model.fit(
+    x=train_images,
+    y=train_masks,
+    validation_split=validation_split,
+    batch_size=batch_size,
+    epochs=n_epochs,
+)
+
+# Plot training results
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+epochs = range(1, len(loss) + 1)
+plt.plot(epochs, loss, 'y', label='Training loss')
+plt.plot(epochs, val_loss, 'r', label='Validation loss')
+plt.title('Training and validation loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
 
 #%% Predict -------------------------------------------------------------------
-      
-# Open prediction images
-prd_images = []
-stack_name = 'KASind1.nd2'
-prd_path = Path('D:\\local_Meschichi\\data')
-stack = nd2.imread(Path(prd_path) / stack_name).squeeze()
-for z in stack:
-    prd_images.append(z)
 
-# Predict
-prd_data = model.eval(
-    prd_images,
-    channels=[0,0], 
-    normalize=False,
-    anisotropy=5.47,
-    )
+# # Paths
+# data_path = Path('D:/local_Meschichi/data')
+# stack_name = 'KASind1.nd2'
 
-# Display 
-prd_images = np.stack(prd_images)
-prd_labels = np.stack([data for data in prd_data[0]])
-prd_mask = prd_labels > 0
-prd_probs = np.stack([data[2] for data in prd_data[1]])
-viewer = napari.Viewer()
-viewer.add_image(prd_images, scale=[5.47, 1, 1])
-viewer.add_labels(prd_labels, scale=[5.47, 1, 1])
-viewer.add_labels(prd_mask, scale=[5.47, 1, 1])
-viewer.add_image(prd_probs, scale=[5.47, 1, 1])
+# # Open & format prediction data
+# predict_images = nd2.imread(Path(data_path) / stack_name).squeeze()  
+# predict_images = rescale(predict_images, (1, rescale_factor, rescale_factor), preserve_range=True)
+# pMax = np.percentile(predict_images, 99.9)
+# predict_images[predict_images > pMax] = pMax
+# predict_images = ((predict_images / pMax)*255).astype('uint8')
+
+# # Predict
+# probs = model.predict(predict_images).squeeze()  
+
+# # Display 
+# viewer = napari.Viewer()
+# viewer.add_image(predict_images)
+# viewer.add_image(probs)
+
