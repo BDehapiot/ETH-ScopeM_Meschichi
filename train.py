@@ -5,6 +5,7 @@ import napari
 import random
 import numpy as np
 from skimage import io
+import tensorflow as tf
 from pathlib import Path
 import albumentations as A
 import matplotlib.pyplot as plt
@@ -22,12 +23,12 @@ train_path = Path(data_path, 'train')
 
 # Training
 rescale_factor = 0.5
-validation_split = 0.2
-n_epochs = 30
-batch_size = 8
+validation_split = 0.33
+n_epochs = 60
+batch_size = 4
 
 # Data augmentation
-iterations = 60
+iterations = 256
 augment = True if iterations > 0 else False
 operations = A.Compose([
     A.VerticalFlip(p=0.5),              
@@ -62,10 +63,10 @@ for path in train_path.iterdir():
                 
 # Format training data
 train_images = np.stack(train_images)
-train_masks = np.stack(train_masks).astype('uint8')
+train_masks = np.stack(train_masks).astype(float)
 pMax = np.percentile(train_images, 99.9)
 train_images[train_images > pMax] = pMax
-train_images = ((train_images / pMax)*255).astype('uint8')
+train_images = (train_images / pMax).astype(float)
 
 # # Display 
 # viewer = napari.Viewer()
@@ -95,13 +96,15 @@ if augment:
 
 #%% Train model ---------------------------------------------------------------
 
-from tensorflow.keras.utils import normalize
-train_images = normalize(train_images)
+# from tensorflow.keras.utils import normalize
+# train_images = normalize(train_images)
 
 print(np.max(train_images))
+print(np.max(train_masks))
+
+# preprocess_input = sm.get_preprocessing('resnet34')
 
 # Define & compile model
-preprocess_input = sm.get_preprocessing('resnet34')
 model = sm.Unet(
     'resnet34', 
     input_shape=(None, None, 1), 
@@ -110,18 +113,20 @@ model = sm.Unet(
     encoder_weights=None,
     )
 model.compile(
-    'Adam',
-    loss=sm.losses.bce_jaccard_loss,
-    metrics=[sm.metrics.iou_score],
+    'Adam', 
+    loss='binary_crossentropy', 
+    metrics=['mse']
     )
 
 # Train model
+callbacks = [tf.keras.callbacks.EarlyStopping(patience=10, monitor='val_loss')]
 history = model.fit(
     x=train_images,
     y=train_masks,
     validation_split=validation_split,
     batch_size=batch_size,
     epochs=n_epochs,
+    callbacks=callbacks,
 )
 
 # Plot training results
@@ -136,18 +141,24 @@ plt.ylabel('Loss')
 plt.legend()
 plt.show()
 
+#
+model.save(Path(Path.cwd(), 'model'))
+model.save_weights(Path(Path.cwd(), 'model_weights.h5'))
+
 #%% Predict -------------------------------------------------------------------
 
 # # Paths
 # data_path = Path('D:/local_Meschichi/data')
-# stack_name = 'KASind1.nd2'
+# data_path = Path(Path.cwd(), 'data', 'local')
+# # stack_name = 'KASind1.nd2'
+# stack_name = 'KZLind1.nd2'
 
 # # Open & format prediction data
 # predict_images = nd2.imread(Path(data_path) / stack_name).squeeze()  
 # predict_images = rescale(predict_images, (1, rescale_factor, rescale_factor), preserve_range=True)
 # pMax = np.percentile(predict_images, 99.9)
 # predict_images[predict_images > pMax] = pMax
-# predict_images = ((predict_images / pMax)*255).astype('uint8')
+# predict_images = (predict_images / pMax)
 
 # # Predict
 # probs = model.predict(predict_images).squeeze()  
@@ -156,4 +167,6 @@ plt.show()
 # viewer = napari.Viewer()
 # viewer.add_image(predict_images)
 # viewer.add_image(probs)
+
+
 
