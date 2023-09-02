@@ -48,7 +48,6 @@ model.compile(
     )
 
 # Load the model
-# model = load_model(Path(Path.cwd(), 'model'))
 model.load_weights(Path(Path.cwd(), 'model_weights.h5'))
 
 # Predict

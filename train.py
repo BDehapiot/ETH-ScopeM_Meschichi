@@ -96,14 +96,6 @@ if augment:
 
 #%% Train model ---------------------------------------------------------------
 
-# from tensorflow.keras.utils import normalize
-# train_images = normalize(train_images)
-
-print(np.max(train_images))
-print(np.max(train_masks))
-
-# preprocess_input = sm.get_preprocessing('resnet34')
-
 # Define & compile model
 model = sm.Unet(
     'resnet34', 
@@ -141,32 +133,5 @@ plt.ylabel('Loss')
 plt.legend()
 plt.show()
 
-#
-model.save(Path(Path.cwd(), 'model'))
+# Save model
 model.save_weights(Path(Path.cwd(), 'model_weights.h5'))
-
-#%% Predict -------------------------------------------------------------------
-
-# # Paths
-# data_path = Path('D:/local_Meschichi/data')
-# data_path = Path(Path.cwd(), 'data', 'local')
-# # stack_name = 'KASind1.nd2'
-# stack_name = 'KZLind1.nd2'
-
-# # Open & format prediction data
-# predict_images = nd2.imread(Path(data_path) / stack_name).squeeze()  
-# predict_images = rescale(predict_images, (1, rescale_factor, rescale_factor), preserve_range=True)
-# pMax = np.percentile(predict_images, 99.9)
-# predict_images[predict_images > pMax] = pMax
-# predict_images = (predict_images / pMax)
-
-# # Predict
-# probs = model.predict(predict_images).squeeze()  
-
-# # Display 
-# viewer = napari.Viewer()
-# viewer.add_image(predict_images)
-# viewer.add_image(probs)
-
-
-
