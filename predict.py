@@ -58,18 +58,18 @@ probs = model.predict(predict_images).squeeze()
 from skimage.filters import gaussian
 from skimage.measure import label
 
-sig = 3
-thresh = 0.5
-probs = gaussian(probs, sigma=(sig / 2.735, sig, sig))
-mask = probs > thresh
-labels = label(mask)
-test = predict_images.copy()
-test[mask==0] = 0
+# sig = 3
+# thresh = 0.5
+# probs = gaussian(probs, sigma=(sig / 2.735, sig, sig))
+# mask = probs > thresh
+# labels = label(mask)
+# test = predict_images.copy()
+# test[mask==0] = 0
 
 # Display 
 viewer = napari.Viewer()
-# viewer.add_image(predict_images, scale=[2.735, 1, 1])
-# viewer.add_image(probs, scale=[2.735, 1, 1])
+viewer.add_image(predict_images, scale=[2.735, 1, 1])
+viewer.add_image(probs, scale=[2.735, 1, 1])
 # viewer.add_image(mask, scale=[2.735, 1, 1])
 # viewer.add_labels(labels, scale=[2.735, 1, 1])
-viewer.add_image(test, scale=[2.735, 1, 1])
+# viewer.add_image(test, scale=[2.735, 1, 1])

@@ -7,10 +7,11 @@ import numpy as np
 from skimage import io
 import tensorflow as tf
 from pathlib import Path
+import albumentations as A
 import matplotlib.pyplot as plt
+import segmentation_models as sm
+from joblib import Parallel, delayed 
 from skimage.transform import rescale
-from skimage.measure import regionprops
-from scipy.ndimage import distance_transform_edt
 
 #%% Parameters ----------------------------------------------------------------
 
@@ -26,117 +27,127 @@ validation_split = 0.33
 n_epochs = 30
 batch_size = 4
 
+# Data augmentation
+iterations = 0
+augment = True if iterations > 0 else False
+operations = A.Compose([
+    A.VerticalFlip(p=0.5),              
+    A.RandomRotate90(p=0.5),
+    A.HorizontalFlip(p=0.5),
+    A.Transpose(p=0.5),
+    A.GridDistortion(p=0.5),
+    ])
+
 #%% Prepare data --------------------------------------------------------------
 
 # Open training data
-train_images, train_labels = [], []
+images, labels, masks = [], [], []
 for path in train_path.iterdir():
-    if 'mask' in path.name:
+    if 'labels' in path.name:
         
         # Get paths
-        labels_path = str(path)
-        image_path = labels_path.replace('_mask', '')
+        label_path = str(path)
+        image_path = label_path.replace('_labels', '')
         
         # Open data
         image = io.imread(image_path)
-        labels = io.imread(labels_path)
+        label = io.imread(label_path)
+        mask = label > 0
 
         # Open & rescale data
         image = rescale(image, rescale_factor, preserve_range=True)
-        labels = rescale(labels, rescale_factor, order=0, preserve_range=True)
+        label = rescale(label, rescale_factor, order=0, preserve_range=True)
+        mask = rescale(mask, rescale_factor, order=0, preserve_range=True)
         
-        # Append train_images & train_labels lists
-        train_images.append(image)
-        train_labels.append(labels)
+        # Append lists
+        images.append(image)
+        labels.append(label)
+        masks.append(mask)
                 
 # Format training data
-train_images = np.stack(train_images)
-train_labels = np.stack(train_labels)
-pMax = np.percentile(train_images, 99.9)
-train_images[train_images > pMax] = pMax
-train_images = (train_images / pMax).astype(float)
+images = np.stack(images)
+labels = np.stack(labels)
+masks = np.stack(masks).astype(float)
+pMax = np.percentile(images, 99.9)
+images[images > pMax] = pMax
+images = (images / pMax).astype(float)
 
-# Get edm data
-train_edm = []
-for labels in train_labels:
-    props = regionprops(labels)
-    edm = labels > 0
-    edm = distance_transform_edt(edm)
-    train_edm.append(edm)
-train_edm = np.stack(train_edm)
-train_edm = train_edm / np.max(train_edm)
-
+# # Display 
 # viewer = napari.Viewer()
-# viewer.add_image(train_edm)
-# viewer.add_image(train_labels)
- 
+# viewer.add_image(train_images)
+# viewer.add_image(train_masks)
+       
+# -----------------------------------------------------------------------------
+
+# if augment:
+
+#     # Augment data
+#     def augment_data(train_images, train_masks, operations):      
+#         idx = random.randint(0, len(train_images) - 1)
+#         outputs = operations(image=train_images[idx,...], mask=train_masks[idx,...])
+#         return outputs['image'], outputs['mask']
+#     outputs = Parallel(n_jobs=-1)(
+#         delayed(augment_data)(train_images, train_masks, operations)
+#         for i in range(iterations)
+#         )
+#     train_images = np.stack([data[0] for data in outputs])
+#     train_masks = np.stack([data[1] for data in outputs])
+    
+    # # Display 
+    # viewer = napari.Viewer()
+    # viewer.add_image(train_images)
+    # viewer.add_labels(train_masks)     
+
+# -----------------------------------------------------------------------------
+
+# from skimage.measure import regionprops
+
+# train_centroids = []
+# for mask in train_masks:
+#     props = regionprops(mask)
+#     centroid = np.zeros_like(mask)
+#     for ctrd in props.centroid:
+#         centroid[ctrd] = 1
+#     train_centroids.append(centroid)
+
 #%% Train model ---------------------------------------------------------------
 
-train_images = train_images[:, :, :, np.newaxis]
-train_edm = train_edm[:, :, :, np.newaxis]
+# # Define & compile model
+# model = sm.Unet(
+#     'resnet34', 
+#     input_shape=(None, None, 1), 
+#     classes=1, 
+#     activation='sigmoid', 
+#     encoder_weights=None,
+#     )
+# model.compile(
+#     'Adam', 
+#     loss='binary_crossentropy', 
+#     metrics=['mse']
+#     )
 
-# Create a simple CNN model
-model = tf.keras.Sequential([
-    tf.keras.layers.InputLayer(input_shape=(512, 512, 1)),  # Grayscale image, values [0, 1]
-    tf.keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
-    tf.keras.layers.MaxPooling2D(),
-    tf.keras.layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
-    tf.keras.layers.UpSampling2D(),
-    tf.keras.layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')
-])
+# # Train model
+# callbacks = [tf.keras.callbacks.EarlyStopping(patience=10, monitor='val_loss')]
+# history = model.fit(
+#     x=train_images,
+#     y=train_masks,
+#     validation_split=validation_split,
+#     batch_size=batch_size,
+#     epochs=n_epochs,
+#     callbacks=callbacks,
+# )
 
-# Compile the model
-model.compile(optimizer='adam', loss='mean_squared_error')
+# # Plot training results
+# loss = history.history['loss']
+# val_loss = history.history['val_loss']
+# epochs = range(1, len(loss) + 1)
+# plt.plot(epochs, loss, 'y', label='Training loss')
+# plt.plot(epochs, val_loss, 'r', label='Validation loss')
+# plt.title('Training and validation loss')
+# plt.xlabel('Epochs')
+# plt.ylabel('Loss')
+# plt.legend()
+# plt.show()
 
-# Train model
-callbacks = [tf.keras.callbacks.EarlyStopping(patience=10, monitor='val_loss')]
-history = model.fit(
-    x=train_images,
-    y=train_edm,
-    validation_split=validation_split,
-    batch_size=batch_size,
-    epochs=n_epochs,
-    callbacks=callbacks,
-)
-
-# Plot training results
-loss = history.history['loss']
-val_loss = history.history['val_loss']
-epochs = range(1, len(loss) + 1)
-plt.plot(epochs, loss, 'y', label='Training loss')
-plt.plot(epochs, val_loss, 'r', label='Validation loss')
-plt.title('Training and validation loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
-plt.legend()
-plt.show()
-
-# # Save model
+# # # Save model
 # model.save_weights(Path(Path.cwd(), 'model_weights.h5'))
-
-#%% Predict -------------------------------------------------------------------
-
-# Paths
-data_path = Path('D:/local_Meschichi/data')
-data_path = Path(Path.cwd(), 'data', 'local')
-# stack_name = 'KASind1.nd2'
-stack_name = 'KZLind1.nd2'
-
-# Training
-rescale_factor = 0.5
-
-# Open & format prediction data
-predict_images = nd2.imread(Path(data_path) / stack_name).squeeze()  
-predict_images = rescale(predict_images, (1, rescale_factor, rescale_factor), preserve_range=True)
-pMax = np.percentile(predict_images, 99.9)
-predict_images[predict_images > pMax] = pMax
-predict_images = (predict_images / pMax)
-predict_images = predict_images[:, :, :, np.newaxis]
-
-# Predict
-probs = model.predict(predict_images).squeeze()  
-
-# Display 
-viewer = napari.Viewer()
-viewer.add_image(predict_images, scale=[2.735, 1, 1])
-viewer.add_image(probs, scale=[2.735, 1, 1])
