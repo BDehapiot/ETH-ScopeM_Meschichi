@@ -13,86 +13,96 @@ import segmentation_models as sm
 from joblib import Parallel, delayed 
 from skimage.transform import rescale
 
-#%% Parameters ----------------------------------------------------------------
+#%% Initialize ----------------------------------------------------------------
 
-random.seed(42) 
-
-# Paths
+# Get paths
 data_path = Path(Path.cwd(), 'data')
 train_path = Path(data_path, 'train') 
 
-# Training
+#%% Parameters ----------------------------------------------------------------
+
+# Data pre-processing
 rescale_factor = 0.5
-validation_split = 0.33
-n_epochs = 60
-batch_size = 4
 
 # Data augmentation
-iterations = 256
-augment = True if iterations > 0 else False
-operations = A.Compose([
-    A.VerticalFlip(p=0.5),              
-    A.RandomRotate90(p=0.5),
-    A.HorizontalFlip(p=0.5),
-    A.Transpose(p=0.5),
-    A.GridDistortion(p=0.5),
-    ])
+iterations = 100
+random.seed(42) 
 
-#%% Prepare data --------------------------------------------------------------
+# Train model
+validation_split = 0.2
+n_epochs = 100
+batch_size = 8
+
+#%% Data pre-processing --------------------------------------------------------
 
 # Open training data
-train_images, train_masks = [], []
+images, labels, masks = [], [], []
 for path in train_path.iterdir():
-    if 'mask' in path.name:
+    if 'labels' in path.name:
         
         # Get paths
-        mask_path = str(path)
-        image_path = mask_path.replace('_mask', '')
+        label_path = str(path)
+        image_path = label_path.replace('_labels', '')
         
         # Open data
         image = io.imread(image_path)
-        mask = io.imread(mask_path) > 0
+        label = io.imread(label_path)
+        mask = label > 0
 
         # Open & rescale data
         image = rescale(image, rescale_factor, preserve_range=True)
-        mask = rescale(mask, rescale_factor, preserve_range=True)
+        label = rescale(label, rescale_factor, order=0, preserve_range=True)
+        mask = rescale(mask, rescale_factor, order=0, preserve_range=True)
         
-        # Append train_images & train_masks lists
-        train_images.append(image)
-        train_masks.append(mask)
+        # Append lists
+        images.append(image)
+        labels.append(label)
+        masks.append(mask)
                 
 # Format training data
-train_images = np.stack(train_images)
-train_masks = np.stack(train_masks).astype(float)
-pMax = np.percentile(train_images, 99.9)
-train_images[train_images > pMax] = pMax
-train_images = (train_images / pMax).astype(float)
+images = np.stack(images)
+labels = np.stack(labels)
+masks = np.stack(masks).astype(float)
+pMax = np.percentile(images, 99.9)
+images[images > pMax] = pMax
+images = (images / pMax).astype(float)
 
 # # Display 
 # viewer = napari.Viewer()
-# viewer.add_image(train_images)
-# viewer.add_image(train_masks)
+# viewer.add_image(images)
+# viewer.add_image(masks)
        
-# -----------------------------------------------------------------------------
+#%% Data augmentation ---------------------------------------------------------
+
+augment = True if iterations > 0 else False
 
 if augment:
+    
+    # Define augmentation operations
+    operations = A.Compose([
+        A.VerticalFlip(p=0.5),              
+        A.RandomRotate90(p=0.5),
+        A.HorizontalFlip(p=0.5),
+        A.Transpose(p=0.5),
+        A.GridDistortion(p=0.5),
+        ])
 
     # Augment data
-    def augment_data(train_images, train_masks, operations):      
-        idx = random.randint(0, len(train_images) - 1)
-        outputs = operations(image=train_images[idx,...], mask=train_masks[idx,...])
+    def augment_data(images, masks, operations):      
+        idx = random.randint(0, len(images) - 1)
+        outputs = operations(image=images[idx,...], mask=masks[idx,...])
         return outputs['image'], outputs['mask']
     outputs = Parallel(n_jobs=-1)(
-        delayed(augment_data)(train_images, train_masks, operations)
+        delayed(augment_data)(images, masks, operations)
         for i in range(iterations)
         )
-    train_images = np.stack([data[0] for data in outputs])
-    train_masks = np.stack([data[1] for data in outputs])
+    images = np.stack([data[0] for data in outputs])
+    masks = np.stack([data[1] for data in outputs])
     
     # # Display 
     # viewer = napari.Viewer()
     # viewer.add_image(train_images)
-    # viewer.add_labels(train_masks)                    
+    # viewer.add_labels(train_masks)     
 
 #%% Train model ---------------------------------------------------------------
 
@@ -105,16 +115,16 @@ model = sm.Unet(
     encoder_weights=None,
     )
 model.compile(
-    'Adam', 
+    optimizer='adam',
     loss='binary_crossentropy', 
     metrics=['mse']
     )
 
 # Train model
-callbacks = [tf.keras.callbacks.EarlyStopping(patience=10, monitor='val_loss')]
+callbacks = [tf.keras.callbacks.EarlyStopping(patience=20, monitor='val_loss')]
 history = model.fit(
-    x=train_images,
-    y=train_masks,
+    x=images,
+    y=masks,
     validation_split=validation_split,
     batch_size=batch_size,
     epochs=n_epochs,
@@ -134,4 +144,26 @@ plt.legend()
 plt.show()
 
 # Save model
-model.save_weights(Path(Path.cwd(), 'model_weights.h5'))
+model.save_weights(Path(Path.cwd(), f'model_weights_{rescale_factor}.h5'))
+
+#%% Predict -------------------------------------------------------------------
+
+# Paths
+data_path = Path(Path.cwd(), 'data', 'local')
+stack_name = 'KASind1.nd2'
+stack_name = 'KZLind1.nd2'
+
+# Open & format prediction data
+stack = nd2.imread(Path(data_path) / stack_name).squeeze()  
+stack = rescale(stack, (1, rescale_factor, rescale_factor), preserve_range=True)
+pMax = np.percentile(stack, 99.9)
+stack[stack > pMax] = pMax
+stack = (stack / pMax)
+
+# Predict
+probs = model.predict(stack).squeeze()  
+
+# Display 
+viewer = napari.Viewer()
+viewer.add_image(stack)
+viewer.add_image(probs)   
