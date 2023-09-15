@@ -33,7 +33,7 @@ validation_split = 0.2
 n_epochs = 100
 batch_size = 8
 
-#%% Data pre-processing --------------------------------------------------------
+#%% Pre-processing ------------------------------------------------------------
 
 # Open training data
 images, labels, masks = [], [], []
@@ -72,7 +72,7 @@ images = (images / pMax).astype(float)
 # viewer.add_image(images)
 # viewer.add_image(masks)
        
-#%% Data augmentation ---------------------------------------------------------
+#%% Augmentation --------------------------------------------------------------
 
 augment = True if iterations > 0 else False
 
@@ -104,7 +104,7 @@ if augment:
     # viewer.add_image(train_images)
     # viewer.add_labels(train_masks)     
 
-#%% Train model ---------------------------------------------------------------
+#%% Model training ------------------------------------------------------------
 
 # Define & compile model
 model = sm.Unet(
@@ -146,7 +146,7 @@ plt.show()
 # Save model
 model.save_weights(Path(Path.cwd(), f'model_weights_{rescale_factor}.h5'))
 
-#%% Predict -------------------------------------------------------------------
+#%% Predictions ---------------------------------------------------------------
 
 # Paths
 data_path = Path(Path.cwd(), 'data', 'local')
