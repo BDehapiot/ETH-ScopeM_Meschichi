@@ -148,22 +148,22 @@ model.save_weights(Path(Path.cwd(), f'model_weights_{rescale_factor}.h5'))
 
 #%% Predictions ---------------------------------------------------------------
 
-# Paths
-data_path = Path(Path.cwd(), 'data', 'local')
-stack_name = 'KASind1.nd2'
-stack_name = 'KZLind1.nd2'
+# # Paths
+# data_path = Path(Path.cwd(), 'data', 'local')
+# stack_name = 'KASind1.nd2'
+# stack_name = 'KZLind1.nd2'
 
-# Open & format prediction data
-stack = nd2.imread(Path(data_path) / stack_name).squeeze()  
-stack = rescale(stack, (1, rescale_factor, rescale_factor), preserve_range=True)
-pMax = np.percentile(stack, 99.9)
-stack[stack > pMax] = pMax
-stack = (stack / pMax)
+# # Open & format prediction data
+# stack = nd2.imread(Path(data_path) / stack_name).squeeze()  
+# stack = rescale(stack, (1, rescale_factor, rescale_factor), preserve_range=True)
+# pMax = np.percentile(stack, 99.9)
+# stack[stack > pMax] = pMax
+# stack = (stack / pMax)
 
-# Predict
-probs = model.predict(stack).squeeze()  
+# # Predict
+# probs = model.predict(stack).squeeze()  
 
-# Display 
-viewer = napari.Viewer()
-viewer.add_image(stack)
-viewer.add_image(probs)   
+# # Display 
+# viewer = napari.Viewer()
+# viewer.add_image(stack)
+# viewer.add_image(probs)   
