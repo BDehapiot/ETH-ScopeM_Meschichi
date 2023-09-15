@@ -43,7 +43,7 @@ rescale_factor = float(model_name[14:17])
 # Nuclei mask (nMask)
 prob_min = 0.5
 prob_sigma = 2 * rescale_factor
-clear_nBorder = True
+clear_nBorder = False
 min_nSize = 4096 * rescale_factor
 
 # Chromocenter mask (cMask)
@@ -62,6 +62,7 @@ with nd2.ND2File(Path(data_path) / stack_name) as ndfile:
     
 # Format data to predict (stack)
 stack = rescale(stack, (1, rescale_factor, rescale_factor), preserve_range=True)
+stack_raw = stack.copy()
 pMax = np.percentile(stack, 99.9)
 stack[stack > pMax] = pMax
 stack = (stack / pMax)
@@ -122,11 +123,6 @@ nLabels = label(nMask)
 
 # -----------------------------------------------------------------------------
 
-# Re-open data to predict (stack)
-with nd2.ND2File(Path(data_path) / stack_name) as ndfile:
-    stack = ndfile.asarray()
-stack = rescale(stack, (1, rescale_factor, rescale_factor), preserve_range=True)
-
 # Compute tophat transform
 def tophat(plane):
     tophat = white_tophat(plane, footprint=disk(tophat_size))
@@ -134,15 +130,14 @@ def tophat(plane):
     return tophat
 outputs = Parallel(n_jobs=-1)(
     delayed(tophat)(plane)
-    for plane in stack
+    for plane in stack_raw
     )
 tophat = np.stack([data for data in outputs])
 tophat[nMask == 0] = 0
 
 # Display 
 viewer = napari.Viewer()
-# viewer.add_image(stack, scale=[z_ratio, 1, 1], contrast_limits = (0, 1))
-viewer.add_image(stack, scale=[z_ratio, 1, 1])
+viewer.add_image(stack_raw, scale=[z_ratio, 1, 1])
 viewer.add_image(tophat, scale=[z_ratio, 1, 1], colormap='inferno')
 viewer.dims.ndisplay = 3
 
@@ -159,19 +154,35 @@ for lab in np.unique(nLabels):
 cSmall = cMask.copy()
 cMask = remove_small_objects(cMask, min_size=min_cSize)
                 
-# # Display 
-# viewer = napari.Viewer()
-# viewer.add_image(stack, scale=[z_ratio, 1, 1])
-# viewer.add_image(
-#     nMask, scale=[z_ratio, 1, 1], 
-#     rendering='attenuated_MIP', colormap='gray')
-# viewer.add_image(
-#     cSmall, name='small chromocenters', scale=[z_ratio, 1, 1], 
-#     rendering='attenuated_MIP', colormap='magenta')
-# viewer.add_image(
-#     cMask, scale=[z_ratio, 1, 1], 
-#     rendering='attenuated_MIP', colormap='green')
-# viewer.dims.ndisplay = 3
+# Display #1 
+viewer = napari.Viewer()
+viewer.add_image(stack_raw, scale=[z_ratio, 1, 1])
+viewer.add_image(
+    nMask, scale=[z_ratio, 1, 1], 
+    rendering='attenuated_MIP', colormap='gray')
+viewer.add_image(
+    cSmall, name='small chromocenters', scale=[z_ratio, 1, 1], 
+    rendering='attenuated_MIP', colormap='magenta')
+viewer.add_image(
+    cMask, scale=[z_ratio, 1, 1], 
+    rendering='attenuated_MIP', colormap='green')
+viewer.dims.ndisplay = 3
+
+# Display #2
+
+from skimage.morphology import binary_erosion
+nMask_outlines = nMask ^ binary_erosion(nMask)
+cMask_outlines = cMask ^ binary_erosion(cMask)
+
+viewer = napari.Viewer()
+viewer.add_image(stack_raw, scale=[z_ratio, 1, 1])
+viewer.add_image(
+    nMask_outlines, scale=[z_ratio, 1, 1], 
+    rendering='attenuated_MIP', colormap='gray')
+viewer.add_image(
+    cMask_outlines, scale=[z_ratio, 1, 1], 
+    rendering='attenuated_MIP', colormap='green')
+viewer.dims.ndisplay = 3
 
 #%% Watershed -----------------------------------------------------------------
 
