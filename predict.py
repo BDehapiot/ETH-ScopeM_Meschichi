@@ -28,8 +28,8 @@ Idea is to reopen data without normalization for tophat transform.
 # stack_name = 'KASind3001.nd2'
 # stack_name = 'KZLind1.nd2'
 # stack_name = 'KZLind1001.nd2'
-# stack_name = 'KZLind2001.nd2'
-stack_name = 'KZLind3001.nd2'
+stack_name = 'KZLind2001.nd2'
+# stack_name = 'KZLind3001.nd2'
 
 # Get paths
 data_path = Path(Path.cwd(), 'data', 'local')
@@ -49,7 +49,7 @@ min_nSize = 4096 * rescale_factor
 # Chromocenter mask (cMask)
 tophat_size = 4 * rescale_factor
 tophat_sigma = 2 * rescale_factor
-tophat_tresh_coeff = 1.5
+tophat_tresh_coeff = 1
 min_cSize = 32 * rescale_factor
 
 #%% Pre-processing ------------------------------------------------------------
@@ -135,11 +135,11 @@ outputs = Parallel(n_jobs=-1)(
 tophat = np.stack([data for data in outputs])
 tophat[nMask == 0] = 0
 
-# Display 
-viewer = napari.Viewer()
-viewer.add_image(stack_raw, scale=[z_ratio, 1, 1])
-viewer.add_image(tophat, scale=[z_ratio, 1, 1], colormap='inferno')
-viewer.dims.ndisplay = 3
+# # Display 
+# viewer = napari.Viewer()
+# viewer.add_image(stack_raw, scale=[z_ratio, 1, 1])
+# viewer.add_image(tophat, scale=[z_ratio, 1, 1], colormap='inferno')
+# viewer.dims.ndisplay = 3
 
 # -----------------------------------------------------------------------------
 
@@ -169,20 +169,23 @@ viewer.add_image(
 viewer.dims.ndisplay = 3
 
 # Display #2
-
-from skimage.morphology import binary_erosion
-nMask_outlines = nMask ^ binary_erosion(nMask)
-cMask_outlines = cMask ^ binary_erosion(cMask)
-
+from skimage.morphology import binary_dilation
+nMask_outlines, cMask_outlines = [], []
+for i, mask in enumerate(nMask):
+    nMask_outlines.append(binary_dilation(mask) ^ mask)
+for i, mask in enumerate(cMask):
+    cMask_outlines.append(binary_dilation(mask) ^ mask)
+nMask_outlines = np.stack(nMask_outlines)
+cMask_outlines = np.stack(cMask_outlines)
 viewer = napari.Viewer()
 viewer.add_image(stack_raw, scale=[z_ratio, 1, 1])
+viewer.add_image(tophat, scale=[z_ratio, 1, 1])
 viewer.add_image(
     nMask_outlines, scale=[z_ratio, 1, 1], 
-    rendering='attenuated_MIP', colormap='gray')
+    blending='additive', colormap='gray')
 viewer.add_image(
     cMask_outlines, scale=[z_ratio, 1, 1], 
-    rendering='attenuated_MIP', colormap='green')
-viewer.dims.ndisplay = 3
+    blending='additive', colormap='green')
 
 #%% Watershed -----------------------------------------------------------------
 
