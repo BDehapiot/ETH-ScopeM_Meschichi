@@ -6,6 +6,7 @@ import time
 import numpy as np
 import pandas as pd
 from skimage import io
+from scipy import stats
 from pathlib import Path
 import segmentation_models as sm
 from skimage.measure import label
@@ -261,6 +262,7 @@ results = pd.DataFrame(
     [item for sublist in stack_data["results"] for item in sublist],
     columns=['name', 'cond', 'label', 'nVolume', 'cVolume', 'cnRatio']
     )
+
 KASind_nVolume = results[results['cond'] == 'KASind']['nVolume'].mean()
 KZLind_nVolume = results[results['cond'] == 'KZLind']['nVolume'].mean()
 KASind_nVolume_sd = results[results['cond'] == 'KASind']['nVolume'].std()
@@ -273,10 +275,17 @@ KASind_cnRatio = results[results['cond'] == 'KASind']['cnRatio'].mean()
 KZLind_cnRatio = results[results['cond'] == 'KZLind']['cnRatio'].mean()
 KASind_cnRatio_sd = results[results['cond'] == 'KASind']['cnRatio'].std()
 KZLind_cnRatio_sd = results[results['cond'] == 'KZLind']['cnRatio'].std()
-print(f'KASind_nVolume = {KASind_nVolume:.3f} µm3 +- {KASind_nVolume_sd:.3f}')
-print(f'KZLind_nVolume = {KZLind_nVolume:.3f} µm3 +- {KASind_nVolume_sd:.3f}')
-print(f'KASind_cVolume = {KASind_cVolume:.3f} µm3 +- {KASind_cVolume_sd:.3f}')
-print(f'KZLind_cVolume = {KZLind_cVolume:.3f} µm3 +- {KASind_cVolume_sd:.3f}')
-print(f'KASind_cnRatio = {KASind_cnRatio:.3f} +- {KASind_cnRatio_sd:.3f}')
-print(f'KZLind_cnRatio = {KZLind_cnRatio:.3f} +- {KZLind_cnRatio_sd:.3f}')
+t_stat, p_value = stats.ttest_ind(
+    results[results['cond'] == 'KASind']['cnRatio'], 
+    results[results['cond'] == 'KZLind']['cnRatio']
+    )
+
+print(f'KASind_nVolume = {KASind_nVolume:.3f} µm3 +- {KASind_nVolume_sd:.3f} sd')
+print(f'KZLind_nVolume = {KZLind_nVolume:.3f} µm3 +- {KZLind_nVolume_sd:.3f} sd')
+print(f'KASind_cVolume = {KASind_cVolume:.3f} µm3 +- {KASind_cVolume_sd:.3f} sd')
+print(f'KZLind_cVolume = {KZLind_cVolume:.3f} µm3 +- {KZLind_cVolume_sd:.3f} sd')
+print(f'KASind_cnRatio = {KASind_cnRatio:.3f} +- {KASind_cnRatio_sd:.3f} sd')
+print(f'KZLind_cnRatio = {KZLind_cnRatio:.3f} +- {KZLind_cnRatio_sd:.3f} sd')
+print(f'p-value = {p_value:.3e}')
+
 
