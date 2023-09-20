@@ -42,13 +42,13 @@ stack_data = {
 # Nuclei nMasks
 prob_min = 0.5
 prob_sigma = 2 * rescale_factor
-clear_nBorder = False
+clear_nBorder = True
 min_nSize = 4096 * rescale_factor
 
-# Chromocenter nMasks 
+# Chromocenter cMasks 
 tophat_size = 4 * rescale_factor
 tophat_sigma = 2 * rescale_factor
-tophat_tresh_coeff = 1
+tophat_tresh_coeff = 1.25
 min_cSize = 32 * rescale_factor
         
 #%% Functions -----------------------------------------------------------------
