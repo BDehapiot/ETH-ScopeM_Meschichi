@@ -4,8 +4,9 @@
 
 
 # ETH-ScopeM_Meschichi
+3D segmentation of nuclei sub-domains  
+
 ## Description
-3D segmentation of nuclei sub-domains
 
 ## Installation
 This tutorial provides a step-by-step guide to install Python, coupled with Spyder, using the Conda environment manager.  
