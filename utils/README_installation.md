@@ -1,13 +1,3 @@
-![Python Badge](https://img.shields.io/badge/Python-3.10-blue?logo=python&logoColor=rgb(149%2C157%2C165)&labelColor=rgb(50%2C60%2C65))  
-![Author Badge](https://img.shields.io/badge/Author-Benoit_Dehapiot-blue?labelColor=rgb(50%2C60%2C65)&color=rgb(149%2C157%2C165))  
-![License Badge](https://img.shields.io/badge/Licence-GNU_General_Public_License_v3.0-blue?labelColor=rgb(50%2C60%2C65)&color=rgb(149%2C157%2C165))  
-
-
-# ETH-ScopeM_Meschichi
-## Description
-3D segmentation of nuclei sub-domains
-
-## Installation
 This tutorial provides a step-by-step guide to install Python, coupled with Spyder, using the Conda environment manager.  
 
 **Conda** environment manager allows to run Python code within a controlled environment that contains all necessary dependencies. It's a best practice to create a distinct environment for each Python-based projects. 
@@ -21,7 +11,7 @@ Select your operating system:
 ### Download GitHub repository:  
 
 1) Download this GitHub repository
-([link](https://github.com/BDehapiot/ETH-ScopeM_Meschichi/archive/refs/heads/main.zip)) 
+([link](https://github.com/BDehapiot/{{ repo_name }}/archive/refs/heads/main.zip)) 
 
 2) Unzip folder to a known location (e.g. `C:\Users\YourUsername\Desktop`)
 
@@ -44,10 +34,10 @@ Select your operating system:
 
 6) Move to the downloaded GitHub repository using the `cd` command: 
     ```bash
-    cd Desktop/ETH-ScopeM_Meschichi-main
+    cd Desktop/{{ repo_name }}-main
     ```
     The prompt should change to reflect our current location:  
-    `(base) C:\Users\YourUsername\Desktop\ETH-ScopeM_Meschichi-main>`
+    `(base) C:\Users\YourUsername\Desktop\{{ repo_name }}-main>`
 
 7) Create a new Conda environment (takes a few minutes): 
     ```bash
@@ -56,10 +46,10 @@ Select your operating system:
 
 8) Activate the newly created environment:
     ```bash
-    conda activate Meschichi
+    conda activate {{ env_name }}
     ```
-    The prompt should now start with `(Meschichi)`  
-    `(Meschichi) C:\Users\YourUsername\Desktop\ETH-ScopeM_Meschichi-main>`
+    The prompt should now start with `({{ env_name }})`  
+    `({{ env_name }}) C:\Users\YourUsername\Desktop\{{ repo_name }}-main>`
 
 ### Start and setup Spyder IDE: 
 
@@ -83,7 +73,7 @@ Select your operating system:
 ### Download GitHub repository: 
 
 1) Download GitHub repository
-([link](https://github.com/BDehapiot/ETH-ScopeM_Meschichi/archive/refs/heads/main.zip)) 
+([link](https://github.com/BDehapiot/{{ repo_name }}/archive/refs/heads/main.zip)) 
 
 2) Unzip folder to a known location (e.g. `~/Desktop`)
 
@@ -127,10 +117,10 @@ Select your operating system:
 
 8) Move to the downloaded GitHub repository: 
     ```bash
-    cd Desktop/ETH-ScopeM_Meschichi-main
+    cd Desktop/{{ repo_name }}-main
     ```
     The prompt should change to reflect our current location:  
-    `(base) YourUsername@MacBook-Pro Desktop/ETH-ScopeM_Meschichi-main %`  
+    `(base) YourUsername@MacBook-Pro Desktop/{{ repo_name }}-main %`  
 
 9) Create a new Conda environment (takes a few minutes):  
     ```bash
@@ -139,11 +129,11 @@ Select your operating system:
 
 10) Activate the newly created environment:
     ```bash
-    conda activate Meschichi
+    conda activate {{ env_name }}
     ```
 
-    The prompt should now start with `(Meschichi)`  
-    `(Meschichi) YourUsername@MacBook-Pro Desktop/ETH-ScopeM_Meschichi-main %`  
+    The prompt should now start with `({{ env_name }})`  
+    `({{ env_name }}) YourUsername@MacBook-Pro Desktop/{{ repo_name }}-main %`  
 
 ### Start and setup Spyder IDE: 
 
@@ -166,23 +156,3 @@ Select your operating system:
 <details> <summary>Linux</summary>  
 
 </details>  
-
-## Dependencies
-### Conda
-- python=3.10
-- numpy=1.23
-- scipy
-- scikit-image
-- pandas
-- joblib
-- matplotlib-base=3.6
-- nd2
-- cudatoolkit=11.2
-- cudnn=8.1
-- pip
-
-### pip
-- napari[all]
-- albumentations
-- tensorflow-gpu==2.10
-- spyder
