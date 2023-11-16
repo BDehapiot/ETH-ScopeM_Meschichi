@@ -9,7 +9,7 @@ from skimage.morphology import binary_dilation
 
 #%% Parameters ----------------------------------------------------------------
 
-idx = 20 # int or name
+idx = 0 # int or name
 
 #%% Initialize ----------------------------------------------------------------
 
