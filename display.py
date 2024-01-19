@@ -9,7 +9,7 @@ from skimage.morphology import binary_dilation
 
 #%% Parameters ----------------------------------------------------------------
 
-idx = 0 # int or name
+idx = 1 # int or name
 
 #%% Initialize ----------------------------------------------------------------
 
@@ -31,7 +31,7 @@ metadata = pd.read_csv(Path(stack_path, f'{stack_path.name}_metadata.csv'))
 voxel_ratio = metadata.loc[0, "voxel_ratio"]
 
 # Open data
-stack = io.imread(Path(stack_path, f'{stack_path.name}_stack.tif'))
+stack  = io.imread(Path(stack_path, f'{stack_path.name}_stack.tif'))
 nMasks = io.imread(Path(stack_path, f'{stack_path.name}_nMasks.tif')).astype(bool)
 cMasks = io.imread(Path(stack_path, f'{stack_path.name}_cMasks.tif')).astype(bool)
 tophat = io.imread(Path(stack_path, f'{stack_path.name}_tophat.tif'))
