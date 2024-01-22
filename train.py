@@ -1,7 +1,5 @@
 #%% Imports -------------------------------------------------------------------
 
-import nd2
-import napari
 import random
 import numpy as np
 from skimage import io
@@ -28,10 +26,13 @@ rescale_factor = 0.5
 iterations = 100
 random.seed(42) 
 
+# GPU
+max_mem = 4096 # in Mb, None to deactivate
+
 # Train model
 validation_split = 0.2
 n_epochs = 100
-batch_size = 8
+batch_size = 4
 
 #%% Pre-processing ------------------------------------------------------------
 
@@ -106,6 +107,21 @@ if augment:
 
 #%% Model training ------------------------------------------------------------
 
+# Set max memory (GPU)
+if max_mem:
+    import tensorflow as tf
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    memory_config = tf.config.experimental\
+        .VirtualDeviceConfiguration(memory_limit=max_mem)
+    if gpus:
+        try:
+            tf.config.experimental\
+                .set_virtual_device_configuration(gpus[0], [memory_config])
+        except RuntimeError as e:
+            print(e)
+
+# -----------------------------------------------------------------------------
+
 # Define & compile model
 model = sm.Unet(
     'resnet34', 
@@ -129,7 +145,7 @@ history = model.fit(
     batch_size=batch_size,
     epochs=n_epochs,
     callbacks=callbacks,
-)
+    )
 
 # Plot training results
 loss = history.history['loss']
@@ -145,25 +161,3 @@ plt.show()
 
 # Save model
 model.save_weights(Path(Path.cwd(), f'model_weights_{rescale_factor}.h5'))
-
-#%% Predictions ---------------------------------------------------------------
-
-# # Paths
-# data_path = Path(Path.cwd(), 'data', 'local')
-# stack_name = 'KASind1.nd2'
-# stack_name = 'KZLind1.nd2'
-
-# # Open & format prediction data
-# stack = nd2.imread(Path(data_path) / stack_name).squeeze()  
-# stack = rescale(stack, (1, rescale_factor, rescale_factor), preserve_range=True)
-# pMax = np.percentile(stack, 99.9)
-# stack[stack > pMax] = pMax
-# stack = (stack / pMax)
-
-# # Predict
-# probs = model.predict(stack).squeeze()  
-
-# # Display 
-# viewer = napari.Viewer()
-# viewer.add_image(stack)
-# viewer.add_image(probs)   

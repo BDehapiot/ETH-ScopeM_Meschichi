@@ -18,8 +18,11 @@ from skimage.morphology import remove_small_objects, white_tophat, disk
 
 #%% Parameters ----------------------------------------------------------------
 
-# stack_name = "KASind1.nd2"
-stack_name = "all"
+stack_name = "KASind1.nd2"
+# stack_name = "all"
+
+# GPU
+max_mem = 4096 # in Mb, None to deactivate
 
 # Model
 model_name = 'model_weights_0.5.h5'
@@ -50,6 +53,23 @@ if stack_name == "all":
 else:
     nd2_paths = [Path(data_path, stack_name)]
         
+# -----------------------------------------------------------------------------
+
+# Set max memory (GPU)
+if max_mem:
+    import tensorflow as tf
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    memory_config = tf.config.experimental\
+        .VirtualDeviceConfiguration(memory_limit=max_mem)
+    if gpus:
+        try:
+            tf.config.experimental\
+                .set_virtual_device_configuration(gpus[0], [memory_config])
+        except RuntimeError as e:
+            print(e)
+
+# -----------------------------------------------------------------------------
+    
 # Define & compile model
 model = sm.Unet(
     'resnet34', 
