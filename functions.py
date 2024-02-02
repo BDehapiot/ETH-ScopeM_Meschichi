@@ -2,30 +2,49 @@
 
 import nd2
 import numpy as np
+from pathlib import Path
+import segmentation_models as sm
+from skimage.filters import gaussian
 from joblib import Parallel, delayed
 from skimage.transform import rescale
 
 #%% Functions -----------------------------------------------------------------
 
-def open_stack(path):
+def open_stack(path, metadata=True):
     
     # Read nd2 file
     with nd2.ND2File(path) as ndfile:
         stack = ndfile.asarray()
+        nZ, nY, nX = stack.shape
         vY, vX, vZ = ndfile.voxel_size()
+    
+    if metadata:
         
+        metadata = {
+            "nZ" : nZ, "nY" : nY, "nX" : nX, 
+            "vZ" : vZ, "vY" : vY, "vX" : vX,
+            }
+    
+        return stack, metadata
+    
+    return stack
+
+# -----------------------------------------------------------------------------
+
+def format_stack(stack, metadata, normalize=True):
+           
     # Rescale & reslice (isotropic voxel)
-    zRatio = vY / vZ
-    rscale = rescale(stack, (1, zRatio, zRatio), order=0)
+    ratio = metadata["vY"] / metadata["vZ"]
+    rscale = rescale(stack, (1, ratio, ratio), order=0)
     rslice = np.swapaxes(rscale, 0, 1)
     
-    # Normalize
-    pMax = np.percentile(rscale, 99.9)
-    rscale[rscale > pMax] = pMax
-    rslice[rslice > pMax] = pMax
-    rscale = (rscale / pMax).astype(float)
-    rslice = (rslice / pMax).astype(float)
-    
+    if normalize:
+        pMax = np.percentile(rscale, 99.9)
+        rscale[rscale > pMax] = pMax
+        rslice[rslice > pMax] = pMax
+        rscale = (rscale / pMax).astype(float)
+        rslice = (rslice / pMax).astype(float)
+        
     return rscale, rslice
 
 # -----------------------------------------------------------------------------
@@ -114,3 +133,50 @@ def merge_patches(patches, shape, size, overlap):
         arr = np.stack(arr)
         
     return arr
+
+# -----------------------------------------------------------------------------
+
+def predict(rscale, rslice):
+            
+    # Define & compile model
+    model = sm.Unet(
+        'resnet34', 
+        input_shape=(None, None, 1), 
+        classes=1, 
+        activation='sigmoid', 
+        encoder_weights=None,
+        )
+    model.compile(
+        optimizer='adam',
+        loss='binary_crossentropy', 
+        metrics=['mse']
+        )
+    
+    # Model paths
+    for model_path in Path.cwd().iterdir():
+        if "rscale_model_weights" in model_path.name: 
+            rscale_model_path = model_path
+        if "rslice_model_weights" in model_path.name: 
+            rslice_model_path = model_path
+
+    # Predict (rscale)
+    model.load_weights(rscale_model_path) 
+    size = int(rscale_model_path.stem.split("_")[-1].split("-")[0])
+    overlap = int(rscale_model_path.stem.split("_")[-1].split("-")[1])    
+    rscale_patches = np.stack(get_patches(rscale, size, overlap))
+    rscale_probs = model.predict(rscale_patches).squeeze()
+    rscale_probs = merge_patches(rscale_probs, rscale.shape, size, overlap)
+
+    # Predict & merge patches (rslice)
+    model.load_weights(rslice_model_path) 
+    size = int(rslice_model_path.stem.split("_")[-1].split("-")[0])
+    overlap = int(rslice_model_path.stem.split("_")[-1].split("-")[1])
+    rslice_patches = np.stack(get_patches(rslice, size, overlap))
+    rslice_probs = model.predict(rslice_patches).squeeze()
+    rslice_probs = merge_patches(rslice_probs, rslice.shape, size, overlap)
+    
+    # Merge predictions
+    rslice_probs = np.swapaxes(rslice_probs, 0, 1)
+    probs = (rscale_probs + rslice_probs) / 2
+    
+    return probs

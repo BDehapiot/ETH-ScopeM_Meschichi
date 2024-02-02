@@ -1,78 +1,62 @@
 #%% Imports -------------------------------------------------------------------
 
+import napari
 import random
 import numpy as np
 from skimage import io
-import tensorflow as tf
 from pathlib import Path
 import albumentations as A
 import matplotlib.pyplot as plt
 import segmentation_models as sm
 from joblib import Parallel, delayed 
-from skimage.transform import rescale
 
-#%% Initialize ----------------------------------------------------------------
+# TensorFlow
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 
-# Get paths
-data_path = Path(Path.cwd(), 'data')
-train_path = Path(data_path, 'train') 
+# Functions
+from functions import get_patches
 
-#%% Parameters ----------------------------------------------------------------
+#%% Inputs --------------------------------------------------------------------
 
-# Data pre-processing
-rescale_factor = 0.5
+# Paths
+train_path = Path(Path.cwd(), 'data', 'stock')
+train_type = "rslice"
+
+# Patches
+size = 128
+overlap = size // 8
 
 # Data augmentation
-iterations = 100
-random.seed(42) 
-
-# GPU
-max_mem = 4096 # in Mb, None to deactivate
+random.seed(42)
+iterations = 1000
 
 # Train model
 validation_split = 0.2
 n_epochs = 100
-batch_size = 4
+batch_size = 32
 
 #%% Pre-processing ------------------------------------------------------------
 
-# Open training data
-images, labels, masks = [], [], []
+img_patches, msk_patches = [], []
 for path in train_path.iterdir():
-    if 'labels' in path.name:
-        
-        # Get paths
-        label_path = str(path)
-        image_path = label_path.replace('_labels', '')
+    if train_type in path.name and 'mask' in path.name:
         
         # Open data
-        image = io.imread(image_path)
-        label = io.imread(label_path)
-        mask = label > 0
-
-        # Open & rescale data
-        image = rescale(image, rescale_factor, preserve_range=True)
-        label = rescale(label, rescale_factor, order=0, preserve_range=True)
-        mask = rescale(mask, rescale_factor, order=0, preserve_range=True)
+        msk = io.imread(path)
+        img = io.imread(str(path).replace('_mask', ''))
         
-        # Append lists
-        images.append(image)
-        labels.append(label)
-        masks.append(mask)
-                
-# Format training data
-images = np.stack(images)
-labels = np.stack(labels)
-masks = np.stack(masks).astype(float)
-pMax = np.percentile(images, 99.9)
-images[images > pMax] = pMax
-images = (images / pMax).astype(float)
+        # Extract patches
+        img_patches.append(get_patches(img, size, overlap))
+        msk_patches.append(get_patches(msk, size, overlap))
+
+img_patches = np.stack([patch for patches in img_patches for patch in patches])
+msk_patches = np.stack([patch for patches in msk_patches for patch in patches])
 
 # # Display 
 # viewer = napari.Viewer()
-# viewer.add_image(images)
-# viewer.add_image(masks)
-       
+# viewer.add_image(img_patches)
+# viewer.add_image(msk_patches) 
+
 #%% Augmentation --------------------------------------------------------------
 
 augment = True if iterations > 0 else False
@@ -94,33 +78,18 @@ if augment:
         outputs = operations(image=images[idx,...], mask=masks[idx,...])
         return outputs['image'], outputs['mask']
     outputs = Parallel(n_jobs=-1)(
-        delayed(augment_data)(images, masks, operations)
+        delayed(augment_data)(img_patches, msk_patches, operations)
         for i in range(iterations)
         )
-    images = np.stack([data[0] for data in outputs])
-    masks = np.stack([data[1] for data in outputs])
+    img_patches = np.stack([data[0] for data in outputs])
+    msk_patches = np.stack([data[1] for data in outputs])
     
     # # Display 
     # viewer = napari.Viewer()
-    # viewer.add_image(train_images)
-    # viewer.add_labels(train_masks)     
+    # viewer.add_image(img_patches)
+    # viewer.add_image(msk_patches) 
 
 #%% Model training ------------------------------------------------------------
-
-# Set max memory (GPU)
-if max_mem:
-    import tensorflow as tf
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    memory_config = tf.config.experimental\
-        .VirtualDeviceConfiguration(memory_limit=max_mem)
-    if gpus:
-        try:
-            tf.config.experimental\
-                .set_virtual_device_configuration(gpus[0], [memory_config])
-        except RuntimeError as e:
-            print(e)
-
-# -----------------------------------------------------------------------------
 
 # Define & compile model
 model = sm.Unet(
@@ -136,11 +105,22 @@ model.compile(
     metrics=['mse']
     )
 
-# Train model
-callbacks = [tf.keras.callbacks.EarlyStopping(patience=20, monitor='val_loss')]
+# Checkpoint & callbacks
+model_checkpoint_callback = ModelCheckpoint(
+    filepath=f"{train_type}_model_weights_{size:04d}-{overlap:04d}.h5",
+    save_weights_only=True,
+    monitor='val_loss',
+    mode='min',
+    save_best_only=True
+    )
+callbacks = [
+    EarlyStopping(patience=20, monitor='val_loss'),
+    model_checkpoint_callback
+    ]
+
+# train model
 history = model.fit(
-    x=images,
-    y=masks,
+    x=img_patches, y=msk_patches,
     validation_split=validation_split,
     batch_size=batch_size,
     epochs=n_epochs,
@@ -158,6 +138,3 @@ plt.xlabel('Epochs')
 plt.ylabel('Loss')
 plt.legend()
 plt.show()
-
-# Save model
-model.save_weights(Path(Path.cwd(), f'model_weights_{rescale_factor}.h5'))
