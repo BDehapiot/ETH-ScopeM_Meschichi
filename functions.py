@@ -4,9 +4,24 @@ import nd2
 import numpy as np
 from pathlib import Path
 import segmentation_models as sm
-from skimage.filters import gaussian
 from joblib import Parallel, delayed
 from skimage.transform import rescale
+
+#%% Functions (GPU) -----------------------------------------------------------
+
+def limit_vram(vram):
+
+    import tensorflow as tf    
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    memory_config = tf.config.experimental\
+        .VirtualDeviceConfiguration(memory_limit=vram)
+    
+    if gpus:
+        try:
+            tf.config.experimental\
+                .set_virtual_device_configuration(gpus[0], [memory_config])
+        except RuntimeError as e:
+            print(e)
 
 #%% Functions -----------------------------------------------------------------
 
@@ -164,7 +179,7 @@ def predict(rscale, rslice):
     size = int(rscale_model_path.stem.split("_")[-1].split("-")[0])
     overlap = int(rscale_model_path.stem.split("_")[-1].split("-")[1])    
     rscale_patches = np.stack(get_patches(rscale, size, overlap))
-    rscale_probs = model.predict(rscale_patches).squeeze()
+    rscale_probs = model.predict(rscale_patches, verbose=0).squeeze()
     rscale_probs = merge_patches(rscale_probs, rscale.shape, size, overlap)
 
     # Predict & merge patches (rslice)
@@ -172,7 +187,7 @@ def predict(rscale, rslice):
     size = int(rslice_model_path.stem.split("_")[-1].split("-")[0])
     overlap = int(rslice_model_path.stem.split("_")[-1].split("-")[1])
     rslice_patches = np.stack(get_patches(rslice, size, overlap))
-    rslice_probs = model.predict(rslice_patches).squeeze()
+    rslice_probs = model.predict(rslice_patches, verbose=0).squeeze()
     rslice_probs = merge_patches(rslice_probs, rslice.shape, size, overlap)
     
     # Merge predictions
