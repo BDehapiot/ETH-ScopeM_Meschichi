@@ -10,16 +10,17 @@ from functions import open_stack, format_stack, predict
 #%% Inputs --------------------------------------------------------------------
 
 # Paths
-local_path = Path('D:/local_Meschichi/data')
+# local_path = Path('D:/local_Meschichi/data')
+local_path = Path(Path.cwd(), 'data', 'local') 
 stack_paths = []
 for path in local_path.iterdir():
     if path.suffix == ".nd2":
         stack_paths.append(path)
 
 # Select stack
-idx = 5
+idx = 7
 
-#%%
+#%% Process -------------------------------------------------------------------
 
 # Skimage
 from skimage.measure import label
@@ -44,7 +45,7 @@ min_nSize = 4096
 # cMask
 tophat_size = 3
 tophat_sigma = 1
-tophat_tresh_coeff = 1.5
+tophat_tresh_coeff = 1.25
 min_cSize = 32
 
 #­ -----------------------------------------------------------------------------
