@@ -6,7 +6,22 @@
 # ETH-ScopeM_Meschichi
 3D segmentation of nuclei sub-domains  
 
-## Description
+## Comments
+- Requested quantifications
+    
+    - number of chromocenters
+    - volume of nuclei and chromocenters
+    - volume ratio
+    - brightness of chromocenters DAPI (see background substraction or not)
+    - shape descriptors (nuclei & chromocenters)
+    - distance nuclei BORDER   / chromocenter centroid
+    - distance nuclei CENTROID / chromocenter centroid
+    
+    - statistics (avg, variance, )
+
+    - create a remote folder
+
+
 
 ## Installation
 This tutorial provides a step-by-step guide to install Python, coupled with Spyder, using the Conda environment manager.  
