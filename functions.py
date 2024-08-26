@@ -5,7 +5,15 @@ import numpy as np
 from pathlib import Path
 import segmentation_models as sm
 from joblib import Parallel, delayed
-from skimage.transform import rescale
+
+# Skimage
+from skimage.measure import label
+from skimage.transform import rescale, resize
+from skimage.segmentation import clear_border
+from skimage.filters import gaussian, threshold_otsu
+from skimage.morphology import (
+    disk, remove_small_objects, binary_dilation, white_tophat
+    )
 
 #%% Functions (GPU) -----------------------------------------------------------
 
@@ -155,7 +163,7 @@ def predict(rscale, rslice):
             
     # Define & compile model
     model = sm.Unet(
-        'resnet34', 
+        'resnet18', # ResNet 18, 34, 50, 101 or 152 
         input_shape=(None, None, 1), 
         classes=1, 
         activation='sigmoid', 
@@ -195,3 +203,7 @@ def predict(rscale, rslice):
     probs = (rscale_probs + rslice_probs) / 2
     
     return probs
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------

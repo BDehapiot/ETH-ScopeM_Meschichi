@@ -10,7 +10,7 @@ from pathlib import Path
 
 # Paths
 local_path = Path('D:/local_Meschichi/data')
-stock_path = Path(Path.cwd(), 'data', 'stock') 
+train_path = Path(Path.cwd(), 'data', 'train') 
 
 # Parameters
 random.seed(42)
@@ -20,7 +20,7 @@ brush_size = 5
 #%%
 
 metadata = []
-for path in stock_path.iterdir():
+for path in train_path.iterdir():
     if "mask" not in path.name:
         metadata.append({
             "name"  : path.name,

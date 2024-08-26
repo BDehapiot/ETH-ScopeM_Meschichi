@@ -11,7 +11,7 @@ from functions import open_stack, format_stack
 
 # Paths
 local_path = Path('D:/local_Meschichi/data')
-stock_path = Path(Path.cwd(), 'data', 'stock') 
+train_path = Path(Path.cwd(), 'data', 'train') 
 
 # Parameters
 random.seed(42)
@@ -31,10 +31,10 @@ for path in local_path.iterdir():
             rand1 = random.randint(0, rscale.shape[0] - 1)
             rand2 = random.randint(0, rslice.shape[0] - 1)
             io.imsave(
-                Path(stock_path, f'{path.stem}_rscale_{rand1:03d}.tif'),
+                Path(train_path, f'{path.stem}_rscale_{rand1:03d}.tif'),
                 rscale[rand1,...].astype("float32"), check_contrast=False,
                 )
             io.imsave(
-                Path(stock_path, f'{path.stem}_rslice_{rand2:03d}.tif'),
+                Path(train_path, f'{path.stem}_rslice_{rand2:03d}.tif'),
                 rslice[rand2,...].astype("float32"), check_contrast=False,
                 )

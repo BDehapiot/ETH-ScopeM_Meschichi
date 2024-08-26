@@ -34,7 +34,8 @@ from skimage.morphology import (
 # -----------------------------------------------------------------------------
 
 # GPU
-vram = 2048 # Limit vram (None to deactivate)
+# vram = 2048 # Limit vram (None to deactivate)
+vram = None # Limit vram (None to deactivate)
 
 # nMask
 prob_sigma = 2
