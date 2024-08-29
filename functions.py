@@ -8,11 +8,13 @@ from joblib import Parallel, delayed
 
 # Skimage
 from skimage.measure import label
+from skimage.feature import peak_local_max
 from skimage.transform import rescale, resize
 from skimage.segmentation import clear_border
+from skimage.segmentation import expand_labels
 from skimage.filters import gaussian, threshold_otsu
 from skimage.morphology import (
-    disk, remove_small_objects, binary_dilation, white_tophat
+    disk, remove_small_objects, white_tophat
     )
 
 #%% Functions (GPU) -----------------------------------------------------------
@@ -31,7 +33,7 @@ def limit_vram(vram):
         except RuntimeError as e:
             print(e)
 
-#%% Functions -----------------------------------------------------------------
+#%% Functions (open_stack) ----------------------------------------------------
 
 def open_stack(path, metadata=True):
     
@@ -52,7 +54,7 @@ def open_stack(path, metadata=True):
     
     return stack
 
-# -----------------------------------------------------------------------------
+#%% Functions (format_stack) --------------------------------------------------
 
 def format_stack(stack, metadata, normalize=True):
            
@@ -70,7 +72,7 @@ def format_stack(stack, metadata, normalize=True):
         
     return rscale, rslice
 
-# -----------------------------------------------------------------------------
+#%% Functions (get_patches) ---------------------------------------------------
 
 def get_patches(arr, size, overlap):
     
@@ -110,7 +112,7 @@ def get_patches(arr, size, overlap):
             
     return patches
 
-# -----------------------------------------------------------------------------
+#%% Functions (merge_patches) -------------------------------------------------
 
 def merge_patches(patches, shape, size, overlap):
     
@@ -157,7 +159,7 @@ def merge_patches(patches, shape, size, overlap):
         
     return arr
 
-# -----------------------------------------------------------------------------
+#%% Functions (predict) -------------------------------------------------------
 
 def predict(rscale, rslice):
             
@@ -204,6 +206,80 @@ def predict(rscale, rslice):
     
     return probs
 
-# -----------------------------------------------------------------------------
+#%% Functions (segment) -------------------------------------------------------
 
-# -----------------------------------------------------------------------------
+def segment(
+        path,
+        # nMask
+        lmax_dist=5,
+        lmax_prom=0.15,
+        prob_thresh=0.25,
+        clear_nBorder=True,
+        min_nSize=4096,
+        # cMask
+        tophat_size=3,
+        tophat_sigma=1,
+        tophat_tresh_coeff=1.25,
+        min_cSize=32,
+        ):
+
+    def _get_tophat(plane):
+        tophat = white_tophat(plane, footprint=disk(tophat_size)) 
+        tophat = gaussian(tophat, sigma=tophat_sigma, preserve_range=True)
+        return tophat
+    
+    # Load & format data
+    stack, metadata = open_stack(path)
+    rscale, rslice = format_stack(stack, metadata)
+    
+    # Predict
+    probs = predict(rscale, rslice)
+    
+    # Nuclei
+    lmax = peak_local_max(
+        probs, min_distance=lmax_dist, threshold_abs=lmax_prom, exclude_border=False)
+    pMask = probs > 0.4 # parameter(s)
+    pMask = remove_small_objects(pMask, min_size=8) # parameter(s)
+    pMax = np.zeros_like(probs, dtype=int)
+    pMax[(lmax[:, 0], lmax[:, 1], lmax[:, 2])] = 1
+    nLabels = label(pMax)
+    nLabels = expand_labels(nLabels, distance=10) 
+    nLabels[pMask == 0] = 0
+    nLabels = expand_labels(nLabels, distance=10)
+    pMax = resize(pMax, stack.shape, order=0)
+    nLabels = resize(nLabels, stack.shape, order=0)
+    nMask = resize(probs, stack.shape, order=1) > prob_thresh
+    if clear_nBorder:
+        nMask = clear_border(nMask)
+    nMask = remove_small_objects(nMask, min_size=min_nSize)
+    nLabels[nMask == 0] = 0
+    
+    # Tophat transform
+    tophat = Parallel(n_jobs=-1)(
+        delayed(_get_tophat)(plane)
+        for plane in stack
+        )
+    tophat = np.stack(tophat)
+
+    # Chromocenters
+    cMask = np.zeros_like(tophat, dtype=bool)
+    for lab in np.unique(nLabels):
+        if lab > 0:
+            idx = (nLabels == lab)
+            values = tophat[idx]
+            thresh = threshold_otsu(values)
+            cMask[idx] = (values > thresh * tophat_tresh_coeff)
+    cMask = remove_small_objects(cMask, min_size=min_cSize)
+    cLabels = label(cMask)
+    
+    # Format outputs
+    outputs = {
+        "stack"    : stack,
+        "metadata" : metadata,
+        "probs"    : probs,
+        "nLabels"  : nLabels,
+        "cLabels"  : cLabels,
+        "tophat"   : tophat,
+        }
+    
+    return outputs
