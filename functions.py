@@ -2,6 +2,7 @@
 
 import nd2
 import numpy as np
+from skimage import io
 from pathlib import Path
 import segmentation_models as sm
 from joblib import Parallel, delayed
@@ -276,10 +277,36 @@ def segment(
     outputs = {
         "stack"    : stack,
         "metadata" : metadata,
-        "probs"    : probs,
-        "nLabels"  : nLabels,
-        "cLabels"  : cLabels,
-        "tophat"   : tophat,
+        "probs"    : probs.astype("float32"),
+        "nLabels"  : nLabels.astype("uint16"),
+        "cLabels"  : cLabels.astype("uint16"),
+        "tophat"   : tophat.astype("float32"),
         }
     
     return outputs
+
+#%% Functions (save) ----------------------------------------------------------
+
+def save(path, outputs):  
+    save_path = path.parent / (path.stem)
+    save_path.mkdir(parents=True, exist_ok=True)
+    io.imsave(
+        save_path / f"{path.stem}_stack.tif",
+        outputs["stack"], check_contrast=False,
+        )
+    io.imsave(
+        save_path / f"{path.stem}_probs.tif",
+        outputs["probs"], check_contrast=False,
+        )
+    io.imsave(
+        save_path / f"{path.stem}_nLabels.tif",
+        outputs["nLabels"], check_contrast=False,
+        )
+    io.imsave(
+        save_path / f"{path.stem}_cLabels.tif",
+        outputs["cLabels"], check_contrast=False,
+        )
+    io.imsave(
+        save_path / f"{path.stem}_tophat.tif",
+        outputs["tophat"], check_contrast=False,
+        )
