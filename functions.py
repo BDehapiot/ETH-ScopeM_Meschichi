@@ -2,21 +2,24 @@
 
 import nd2
 import numpy as np
+import pandas as pd
 from skimage import io
 from pathlib import Path
 import segmentation_models as sm
 from joblib import Parallel, delayed
 
 # Skimage
-from skimage.measure import label
 from skimage.feature import peak_local_max
 from skimage.transform import rescale, resize
-from skimage.segmentation import clear_border
-from skimage.segmentation import expand_labels
+from skimage.measure import label, regionprops
 from skimage.filters import gaussian, threshold_otsu
+from skimage.segmentation import clear_border, expand_labels
 from skimage.morphology import (
     disk, remove_small_objects, white_tophat
     )
+
+# Scipy
+from scipy.ndimage import distance_transform_edt
 
 #%% Functions (GPU) -----------------------------------------------------------
 
@@ -238,7 +241,9 @@ def segment(
     
     # Nuclei
     lmax = peak_local_max(
-        probs, min_distance=lmax_dist, threshold_abs=lmax_prom, exclude_border=False)
+        probs, exclude_border=False,
+        min_distance=lmax_dist, threshold_abs=lmax_prom,
+        )
     pMask = probs > 0.4 # parameter(s)
     pMask = remove_small_objects(pMask, min_size=8) # parameter(s)
     pMax = np.zeros_like(probs, dtype=int)
@@ -285,11 +290,126 @@ def segment(
     
     return outputs
 
+#%% Functions (Measure) -------------------------------------------------------
+
+def measure(outputs, rFactor=0.5):
+
+    # Get variables
+    stack = outputs["stack"]
+    nLabels = outputs["nLabels"]
+    cLabels = outputs["cLabels"]
+    metadata = outputs["metadata"]
+    
+    # Rescale (isotropic voxel)
+    ratio = metadata["vZ"] / metadata["vY"]
+    stack = rescale(stack, (ratio * rFactor, rFactor, rFactor), order=0)
+    nLabels = rescale(nLabels, (ratio * rFactor, rFactor, rFactor), order=0)
+    cLabels = rescale(cLabels, (ratio * rFactor, rFactor, rFactor), order=0)
+    cMask = cLabels > 0
+    
+    # nData -------------------------------------------------------------------
+    
+    nData = {
+        
+        # Nuclei
+        "nLabel" : [], "nArea" : [], "nCtrd" : [],
+        "nSolid" : [], "nMajor" : [], "nMinor" : [], "nMinMajRatio" : [],
+        
+        # Associated chromocenters
+        "cLabels" : [], "cNumber" : [],
+        "cArea" : [], "cnAreaRatio" : [],
+        
+        }
+    
+    for nProps in regionprops(nLabels):
+        
+        # Nuclei
+        nData["nLabel"].append(nProps.label)
+        nData["nArea"].append(nProps.area)
+        nCtrd = nProps.centroid
+        nCtrd = [int(ctrd) for ctrd in nCtrd]
+        nData["nCtrd"].append(nCtrd)
+        nData["nSolid"].append(nProps.solidity)
+        nData["nMajor"].append(nProps.axis_major_length)
+        nData["nMinor"].append(nProps.axis_minor_length)
+        nData["nMinMajRatio"].append(
+            nProps.axis_minor_length / nProps.axis_major_length)
+    
+        # Associated chromocenters    
+        unique = np.unique(cLabels[nLabels == nProps.label])
+        unique = unique[unique != 0]
+        nData["cLabels"].append(unique)
+        nData["cNumber"].append(unique.shape[0])
+        cArea = np.sum(cMask[nLabels == nProps.label])
+        nData["cArea"].append(cArea)
+        nData["cnAreaRatio"].append(cArea / nProps.area)
+    
+    nData = pd.DataFrame(nData)
+    
+    # cData -------------------------------------------------------------------
+    
+    # Compute EDMs
+    nCtrd = np.stack([ctrd for ctrd in nData["nCtrd"]])
+    nCtrd = ((nCtrd[:, 0], nCtrd[:, 1], nCtrd[:, 2]))
+    EDMb = distance_transform_edt(nLabels > 0) * (metadata["vY"] / rFactor)
+    EDMc = np.zeros_like(nLabels, dtype=bool)
+    EDMc[nCtrd] = True
+    EDMc = distance_transform_edt(np.invert(EDMc)) * (metadata["vY"] / rFactor)
+    EDMc[EDMb == 0] = 0
+    
+    cData = {
+        
+        # Chromocenters
+        "cLabel" : [], "cArea" : [], "cCtrd" : [],
+        "cSolid" : [], "cMajor" : [], "cMinor" : [], "cMinMajRatio" : [],
+        "cInt" : [], "cEDMb" : [], "cEDMc" : [], 
+        
+        # Associated nuclei
+        "nLabel" : [],
+        
+        }
+    
+    for cProps in regionprops(cLabels, intensity_image=stack):
+        
+        # Chromocenters
+        cData["cLabel"].append(cProps.label)
+        cData["cArea"].append(cProps.area)
+        cCtrd = cProps.centroid
+        cCtrd = [int(ctrd) for ctrd in cCtrd]
+        cData["cCtrd"].append(cCtrd)
+        cData["cSolid"].append(cProps.solidity)
+        cData["cMajor"].append(cProps.axis_major_length)
+        cData["cMinor"].append(cProps.axis_minor_length)
+        cData["cMinMajRatio"].append(
+            cProps.axis_minor_length / cProps.axis_major_length)
+        cData["cInt"].append(cProps.intensity_mean) # To be discussed
+        cData["cEDMb"].append(EDMb[cCtrd[0], cCtrd[1], cCtrd[2]])
+        cData["cEDMc"].append(EDMc[cCtrd[0], cCtrd[1], cCtrd[2]])
+        
+        # Associated nuclei
+        cData["nLabel"].append(np.max(nLabels[cLabels == cProps.label]))
+    
+    cData = pd.DataFrame(cData)
+    
+    # Format outputs
+    outputs["nData"] = nData
+    outputs["cData"] = cData
+    
+    return outputs
+
 #%% Functions (save) ----------------------------------------------------------
 
 def save(path, outputs):  
     save_path = path.parent / (path.stem)
     save_path.mkdir(parents=True, exist_ok=True)
+    
+    # Dataframes
+    outputs["nData"].to_csv(
+        save_path / f"{path.stem}_nData.csv", index=False, float_format='%.3f')
+    outputs["cData"].to_csv(
+        save_path / f"{path.stem}_cData.csv", index=False, float_format='%.3f')
+    
+    # Images
     io.imsave(
         save_path / f"{path.stem}_stack.tif",
         outputs["stack"], check_contrast=False,
