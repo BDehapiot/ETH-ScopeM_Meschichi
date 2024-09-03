@@ -11,8 +11,7 @@
 
 ## Index
 - [Installation](#installation)
-- [Title 1](#title-1)
-- [Title 2](#title-2)
+- [Outputs](#outputs)
 - [Comments](#comments)
 
 ## Installation
@@ -84,18 +83,54 @@ Your prompt should now start with `(Meschichi)` instead of `(base)`
 
 </details>
 
-## Title 1
+## Outputs
 
-## Title 2
+### nData.csv - nuclei data
+
+```bash
+# Nuclei data
+    - nLabel  # nuclei IDs
+    - nVolume # volume (µm3)  
+    - nCtrd
+    - nMajor
+    - nMinor
+    - nMMRatio
+
+
+# Associated chromocenters data
+    - n_cLabel # associated chromocenter IDs
+    - n_cNumber 
+    - n_cVolume
+    - n_cnRatio
+```
+
+### cData.csv - chromocenters data
+
+```bash
+# Chromocenters data data
+    - cLabel  # chromocenter IDs
+    - nVolume # volume (µm3)  
+    - cCtrd
+    - cMajor
+    - cMinor
+    - cMMRatio
+    - cInt
+    - cEDMb
+    - cEDMc
+
+# Associated nuclei data
+    - c_nLabel # associated chromocenter IDs
+```
 
 ## Comments
+### Meeting 24/05/2024
 - Quantifications    
-    - number of chromocenters
-    - volume of nuclei, chromocenters and ratio
-    - brightness of chromocenters DAPI (background substraction ?)
-    - shape descriptors (nuclei & chromocenters)
-    - distance nuclei border vs. chromocenter centroid
-    - distance nuclei centroid vs. chromocenter centroid
+    - number of chromocenters (**done**)
+    - volume of nuclei, chromocenters and ratio (**done**)
+    - brightness of chromocenters DAPI (background substraction ?) (**done**)
+    - shape descriptors (nuclei & chromocenters) (**done**)
+    - distance nuclei border vs. chromocenter centroid (**done**)
+    - distance nuclei centroid vs. chromocenter centroid (**done**)
     - statistics (avg, variance, std...)
 - Other
     - create a remote folder (**done**)
