@@ -1,6 +1,7 @@
 #%% Imports -------------------------------------------------------------------
 
 import nd2
+import napari
 import numpy as np
 import pandas as pd
 from skimage import io
@@ -15,7 +16,7 @@ from skimage.measure import label, regionprops
 from skimage.filters import gaussian, threshold_otsu
 from skimage.segmentation import clear_border, expand_labels
 from skimage.morphology import (
-    disk, remove_small_objects, white_tophat
+    disk, remove_small_objects, white_tophat, binary_dilation
     )
 
 # Scipy
@@ -300,101 +301,142 @@ def measure(outputs, rFactor=0.5):
     cLabels = outputs["cLabels"]
     metadata = outputs["metadata"]
     
-    # Rescale (isotropic voxel)
+    # Isotropic stacks (1st rescaling)
     ratio = metadata["vZ"] / metadata["vY"]
     stack = rescale(stack, (ratio * rFactor, rFactor, rFactor), order=0)
     nLabels = rescale(nLabels, (ratio * rFactor, rFactor, rFactor), order=0)
     cLabels = rescale(cLabels, (ratio * rFactor, rFactor, rFactor), order=0)
-    cMask = cLabels > 0
+    voxSize = metadata["vY"] / rFactor
     
     # nData -------------------------------------------------------------------
-    
+
     nData = {
         
         # Nuclei
-        "nLabel" : [], "nArea" : [], "nCtrd" : [],
-        "nSolid" : [], "nMajor" : [], "nMinor" : [], "nMinMajRatio" : [],
+        "nLabel"   : [],
+        "nVolume"  : [],
+        "nCtrd"    : [],
+        "nMajor"   : [], 
+        "nMinor"   : [],
+        "nMMRatio" : [],
         
-        # Associated chromocenters
-        "cLabels" : [], "cNumber" : [],
-        "cArea" : [], "cnAreaRatio" : [],
+        # Chromocenters
+        "n_cLabels"  : [], 
+        "n_cNumber"  : [],
+        "n_cVolume"  : [], 
+        "n_cnRatio"  : [],
         
         }
-    
+
     for nProps in regionprops(nLabels):
         
         # Nuclei
         nData["nLabel"].append(nProps.label)
-        nData["nArea"].append(nProps.area)
+        nVolume = nProps.area * (voxSize ** 3)
+        nData["nVolume"].append(nVolume)
         nCtrd = nProps.centroid
         nCtrd = [int(ctrd) for ctrd in nCtrd]
         nData["nCtrd"].append(nCtrd)
-        nData["nSolid"].append(nProps.solidity)
-        nData["nMajor"].append(nProps.axis_major_length)
-        nData["nMinor"].append(nProps.axis_minor_length)
-        nData["nMinMajRatio"].append(
-            nProps.axis_minor_length / nProps.axis_major_length)
-    
-        # Associated chromocenters    
+        try:
+            nMajor = nProps.axis_major_length * voxSize
+            nMinor = nProps.axis_minor_length * voxSize
+            nMMRatio = nMinor / nMajor
+            nData["nMajor"].append(nMajor)
+            nData["nMinor"].append(nMinor)
+            nData["nMMRatio"].append(nMMRatio)
+        except ValueError:
+            nData["nMajor"].append(np.nan)
+            nData["nMinor"].append(np.nan)
+            nData["nMMRatio"].append(np.nan)
+
+        # Chromocenters
         unique = np.unique(cLabels[nLabels == nProps.label])
         unique = unique[unique != 0]
-        nData["cLabels"].append(unique)
-        nData["cNumber"].append(unique.shape[0])
-        cArea = np.sum(cMask[nLabels == nProps.label])
-        nData["cArea"].append(cArea)
-        nData["cnAreaRatio"].append(cArea / nProps.area)
-    
-    nData = pd.DataFrame(nData)
+        nData["n_cLabels"].append(unique)
+        nData["n_cNumber"].append(unique.shape[0])
+        cMask = cLabels > 0
+        cVolume = np.sum(cMask[nLabels == nProps.label]) * (voxSize ** 3)
+        nData["n_cVolume"].append(cVolume)
+        nData["n_cnRatio"].append(cVolume / nVolume)
+
+    # EDMs --------------------------------------------------------------------
+
+    # Compute EDM (2nd rescaling)
+    nCtrd = np.stack([ctrd for ctrd in nData["nCtrd"]])
+    nCtrd = ((
+        (nCtrd[:, 0] * rFactor).astype(int), 
+        (nCtrd[:, 1] * rFactor).astype(int), 
+        (nCtrd[:, 2] * rFactor).astype(int),
+        ))
+    EDMb = distance_transform_edt(rescale(nLabels, rFactor, order=0) > 0)
+    EDMc = np.zeros_like(EDMb, dtype=bool)
+    EDMc[nCtrd] = True
+    EDMc = distance_transform_edt(np.invert(EDMc))
+    EDMc[EDMb == 0] = 0
+    EDMb = resize(EDMb, nLabels.shape, order=0)
+    EDMc = resize(EDMc, nLabels.shape, order=0)
     
     # cData -------------------------------------------------------------------
-    
-    # Compute EDMs
-    nCtrd = np.stack([ctrd for ctrd in nData["nCtrd"]])
-    nCtrd = ((nCtrd[:, 0], nCtrd[:, 1], nCtrd[:, 2]))
-    EDMb = distance_transform_edt(nLabels > 0) * (metadata["vY"] / rFactor)
-    EDMc = np.zeros_like(nLabels, dtype=bool)
-    EDMc[nCtrd] = True
-    EDMc = distance_transform_edt(np.invert(EDMc)) * (metadata["vY"] / rFactor)
-    EDMc[EDMb == 0] = 0
-    
+
     cData = {
         
         # Chromocenters
-        "cLabel" : [], "cArea" : [], "cCtrd" : [],
-        "cSolid" : [], "cMajor" : [], "cMinor" : [], "cMinMajRatio" : [],
-        "cInt" : [], "cEDMb" : [], "cEDMc" : [], 
+        "cLabel"   : [],
+        "cVolume"  : [],
+        "cCtrd"    : [],
+        "cMajor"   : [],
+        "cMinor"   : [],
+        "cMMRatio" : [],
+        "cInt"     : [],
+        "cEDMb"    : [],
+        "cEDMc"    : [], 
         
-        # Associated nuclei
-        "nLabel" : [],
+        # Nuclei
+        "c_nLabel"   : [],
         
         }
-    
+
     for cProps in regionprops(cLabels, intensity_image=stack):
         
         # Chromocenters
         cData["cLabel"].append(cProps.label)
-        cData["cArea"].append(cProps.area)
+        cVolume = cProps.area * (voxSize ** 3)
+        cData["cVolume"].append(cVolume)
         cCtrd = cProps.centroid
         cCtrd = [int(ctrd) for ctrd in cCtrd]
         cData["cCtrd"].append(cCtrd)
-        cData["cSolid"].append(cProps.solidity)
-        cData["cMajor"].append(cProps.axis_major_length)
-        cData["cMinor"].append(cProps.axis_minor_length)
-        cData["cMinMajRatio"].append(
-            cProps.axis_minor_length / cProps.axis_major_length)
+        try:
+            cMajor = cProps.axis_major_length * voxSize
+            cMinor = cProps.axis_minor_length * voxSize
+            cMMRatio = cMinor / cMajor
+            cData["cMajor"].append(cMajor)
+            cData["cMinor"].append(cMinor)
+            cData["cMMRatio"].append(cMMRatio)
+        except ValueError:
+            cData["cMajor"].append(np.nan)
+            cData["cMinor"].append(np.nan)
+            cData["cMMRatio"].append(np.nan)
         cData["cInt"].append(cProps.intensity_mean) # To be discussed
-        cData["cEDMb"].append(EDMb[cCtrd[0], cCtrd[1], cCtrd[2]])
-        cData["cEDMc"].append(EDMc[cCtrd[0], cCtrd[1], cCtrd[2]])
+        cEDMb = EDMb[cCtrd[0], cCtrd[1], cCtrd[2]] * voxSize
+        cEDMc = EDMc[cCtrd[0], cCtrd[1], cCtrd[2]] * voxSize
+        cData["cEDMb"].append(cEDMb)
+        cData["cEDMc"].append(cEDMc)
         
         # Associated nuclei
-        cData["nLabel"].append(np.max(nLabels[cLabels == cProps.label]))
-    
-    cData = pd.DataFrame(cData)
-    
-    # Format outputs
-    outputs["nData"] = nData
-    outputs["cData"] = cData
-    
+        cData["c_nLabel"].append(np.max(nLabels[cLabels == cProps.label]))
+
+    # Outputs -----------------------------------------------------------------
+
+    # Correct centroids
+    for i, nCtrd in enumerate(nData["nCtrd"]):
+        nData["nCtrd"][i] = [int(c / rFactor) for c in nCtrd]
+    for i, cCtrd in enumerate(cData["cCtrd"]):
+        cData["cCtrd"][i] = [int(c / rFactor) for c in cCtrd]
+
+    # Append outputs
+    outputs["nData"] = pd.DataFrame(nData)
+    outputs["cData"] = pd.DataFrame(cData)
+
     return outputs
 
 #%% Functions (save) ----------------------------------------------------------
@@ -430,3 +472,41 @@ def save(path, outputs):
         save_path / f"{path.stem}_tophat.tif",
         outputs["tophat"], check_contrast=False,
         )
+
+#%% Functions (display) -------------------------------------------------------
+
+def display(stack, metadata, nLabels, cLabels, tophat):
+
+    def get_outlines(labels):
+        mask = labels > 0
+        outlines = np.zeros_like(mask)
+        for z, img in enumerate(mask):
+            outlines[z, ...] = binary_dilation(img) ^ img  
+        return outlines
+    
+    # Scale
+    scale = [metadata["vZ"] / metadata["vY"], 1, 1]
+    
+    # Outlines
+    nOutlines = get_outlines(nLabels)
+    cOutlines = get_outlines(cLabels)
+    
+    # Viewer (labels)
+    viewer0 = napari.Viewer()
+    viewer0.add_image(stack, scale=scale)
+    viewer0.add_labels(nLabels, scale=scale,
+        blending="additive")
+    viewer0.add_labels(cLabels, scale=scale, 
+        blending="translucent")
+    
+    # Viewer (segmentation)
+    viewer1 = napari.Viewer()
+    viewer1.add_image(stack, scale=scale,
+      blending="additive", opacity=1.00, gamma=0.75, colormap="inferno")
+    viewer1.add_image(tophat, scale=scale,
+      blending="additive", opacity=1.00, gamma=1.50, colormap="inferno")
+    viewer1.add_image(nOutlines, scale=scale,
+      blending="additive", opacity=0.25, gamma=1.00, colormap="gray")
+    viewer1.add_image(cOutlines, scale=scale,
+      blending="additive", opacity=0.25, gamma=1.00, colormap="gray")
+    

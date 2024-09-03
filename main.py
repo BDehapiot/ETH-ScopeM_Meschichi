@@ -2,44 +2,34 @@
 
 import time
 import napari
-import numpy as np
+from numba import cuda
+from skimage import io
 from pathlib import Path
-from joblib import Parallel, delayed
-from functions import open_stack, format_stack, predict
+from functions import limit_vram, segment, measure, save, display
 
-#%% Inputs --------------------------------------------------------------------
+#%% Comments ------------------------------------------------------------------
 
-# Paths
-# local_path = Path('D:/local_Meschichi/data')
-local_path = Path(Path.cwd(), 'data', 'local') 
-stack_paths = []
-for path in local_path.iterdir():
-    if path.suffix == ".nd2":
-        stack_paths.append(path)
+'''
+- Intensity measurements normalization?
 
-# Select stack
-idx = 7
+'''
 
-#%% Process -------------------------------------------------------------------
+#%% Parameters ----------------------------------------------------------------
 
-# Skimage
-from skimage.measure import label
-from skimage.transform import resize
-from skimage.segmentation import clear_border
-from skimage.filters import gaussian, threshold_otsu
-from skimage.morphology import (
-    disk, remove_small_objects, binary_dilation, white_tophat
-    )
+# Path
+# data_path = Path(Path.cwd(), "data", "local") 
+data_path = Path("D:/local_Meschichi/data")
+# data_path = Path(r"\\scopem-idadata.ethz.ch\BDehapiot\remote_Meschichi\data")
 
-# -----------------------------------------------------------------------------
-
-# GPU
-# vram = 2048 # Limit vram (None to deactivate)
-vram = None # Limit vram (None to deactivate)
+# Batch
+batch = False
+overwrite = True
+stack_name = "KZLind3" # if batch == False 
 
 # nMask
-prob_sigma = 2
-prob_thresh = 0.5
+lmax_dist = 5
+lmax_prom = 0.15
+prob_thresh = 0.25
 clear_nBorder = True
 min_nSize = 4096
 
@@ -47,111 +37,93 @@ min_nSize = 4096
 tophat_size = 3
 tophat_sigma = 1
 tophat_tresh_coeff = 1.25
-min_cSize = 32
+min_cSize = 64
 
-#­ -----------------------------------------------------------------------------
+# Measure
+rFactor = 0.5
 
-if vram:
-    from functions import limit_vram
+# Display
+disp = True
+
+# GPU
+vram = None # Limit vram (None to deactivate)
+if vram is not None:
     limit_vram(vram)
+    print(f"VRAM limited to {vram}")
 
-# -----------------------------------------------------------------------------
+#%% Execute -------------------------------------------------------------------
 
-def get_nMask(stack, metadata, prob_sigma, prob_thresh):
+if __name__ == "__main__":
     
-    # Format data
-    rscale, rslice = format_stack(stack, metadata)
-    ratio = metadata["vY"] / metadata["vZ"]
-    
-    # Predict
-    probs = predict(rscale, rslice)
-    probs = resize(probs, stack.shape, order=1)
-    probs = gaussian(probs, sigma=(
-        prob_sigma * ratio, prob_sigma, prob_sigma
-        ))
-    
-    # Nuclei mask (nMask)
-    nMask = probs > prob_thresh
-    if clear_nBorder:
-        nMask = clear_border(nMask)
-    nMask = remove_small_objects(nMask, min_size=min_nSize)
-    
-    # Nuclei labels (nLabels)
-    nLabels = label(nMask)
-    
-    # Nuclei outlines (nOutlines)
-    nOutlines = binary_dilation(nMask) ^ nMask
+    # Get paths
+    paths = []
+    for path in data_path.iterdir():
+        if path.suffix != ".nd2":
+            continue
+        
+        is_dir = (path.parent / path.stem).is_dir()
+        
+        if batch:
+           if overwrite:
+               paths.append(path)
+           elif not is_dir:
+               paths.append(path)
+        elif path.stem == stack_name:
+            if overwrite:
+                paths.append(path)
+            elif not is_dir:
+                paths.append(path)
 
-    return nMask, nLabels, nOutlines
-
-# -----------------------------------------------------------------------------
-
-def get_cMask(stack, nLabels, tophat_size, tophat_sigma):
-    
-    def _get_tophat(plane):
-        tophat = white_tophat(plane, footprint=disk(tophat_size)) 
-        tophat = gaussian(tophat, sigma=tophat_sigma, preserve_range=True)
-        return tophat
-       
-    # Tophat transform
-    tophat = Parallel(n_jobs=-1)(
-        delayed(_get_tophat)(plane)
-        for plane in stack
-        )
-    tophat = np.stack(tophat)
-    
-    # Chromocenter mask (cMask)
-    cMask = np.zeros_like(tophat, dtype=bool)
-    for lab in np.unique(nLabels):
-        if lab > 0:
-            idx = (nLabels == lab)
-            values = tophat[idx]
-            thresh = threshold_otsu(values)
-            cMask[idx] = (values > thresh * tophat_tresh_coeff)
-    cMask = remove_small_objects(cMask, min_size=min_cSize)
-    
-    # Chromocenter outlines (cOutlines)
-    cOutlines = binary_dilation(cMask) ^ cMask
-    
-    return cMask, cOutlines, tophat   
-
-# -----------------------------------------------------------------------------
-
-stack, metadata = open_stack(stack_paths[idx])
-
-print("get_nMask :", end='')
-t0 = time.time()
-
-nMask, nLabels, nOutlines = get_nMask(stack, metadata, prob_sigma, prob_thresh)
-
-t1 = time.time()
-print(f" {(t1-t0):<5.2f}s")
-
-# -----------------------------------------------------------------------------
-
-print("get_cMask :", end='')
-t0 = time.time()
-
-cMask, cOutlines, tophat  = get_cMask(stack, nLabels, tophat_size, tophat_sigma)
-
-t1 = time.time()
-print(f" {(t1-t0):<5.2f}s")
+    # Process
+    for path in paths:
+           
+        print(f"{path.stem}")
+        t0 = time.time()
+                
+        # Segment
+        print(" - Segment :", end='')        
+        outputs = segment(
+            path,
+            # nMask
+            lmax_dist=lmax_dist,
+            lmax_prom=lmax_prom,
+            prob_thresh=prob_thresh,
+            clear_nBorder=clear_nBorder,
+            min_nSize=min_nSize,
+            # cMask
+            tophat_size=tophat_size,
+            tophat_sigma=tophat_sigma,
+            tophat_tresh_coeff=tophat_tresh_coeff,
+            min_cSize=min_cSize,
+            )
+        t1 = time.time()
+        print(f" {(t1-t0):<5.2f}s")
+        
+        # Measure
+        print(" - Measure :", end='')
+        outputs = measure(outputs, rFactor=rFactor)
+        t2 = time.time()
+        print(f" {(t2-t1):<5.2f}s")
+        
+        # Save
+        print(" - Save :", end='')
+        save(path, outputs)
+        t3 = time.time()
+        print(f" {(t3-t2):<5.2f}s")
 
 #%% Display -------------------------------------------------------------------
 
-scale = [metadata["vZ"] / metadata["vY"], 1, 1]
+    if not batch and disp: 
 
-# Check segmentation 2D
-viewer = napari.Viewer()
-viewer.add_image(stack, scale=scale, colormap='plasma')
-viewer.add_image(tophat, scale=scale, colormap='plasma')
-viewer.add_image(nOutlines, scale=scale, blending='additive', opacity=0.25)
-viewer.add_image(cOutlines, scale=scale, blending='additive', opacity=0.5)
+        # Clear VRAM
+        cuda.select_device(0)
+        cuda.close()
 
-# Check segmentation 3D
-viewer = napari.Viewer()
-viewer.add_image(stack, scale=scale)
-viewer.add_image(tophat, scale=scale)
-viewer.add_image(nMask, scale=scale, rendering='attenuated_MIP', colormap='magenta', opacity=0.75)
-viewer.add_image(cMask, scale=scale, rendering='attenuated_MIP', colormap='green', opacity=0.5)
-viewer.dims.ndisplay = 3
+        # Display
+        display(
+            outputs["stack"], 
+            outputs["metadata"], 
+            outputs["nLabels"], 
+            outputs["cLabels"], 
+            outputs["tophat"],
+            )

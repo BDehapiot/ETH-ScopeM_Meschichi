@@ -3,6 +3,7 @@
 import napari
 import random
 import numpy as np
+import pandas as pd
 from skimage import io
 from pathlib import Path
 import albumentations as A
@@ -11,6 +12,7 @@ import segmentation_models as sm
 from joblib import Parallel, delayed 
 
 # TensorFlow
+from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 
 # Functions
@@ -19,7 +21,7 @@ from functions import get_patches
 #%% Inputs --------------------------------------------------------------------
 
 # Paths
-train_path = Path(Path.cwd(), 'data', 'stock')
+train_path = Path(Path.cwd(), 'data', 'train')
 train_type = "rslice"
 
 # Patches
@@ -31,9 +33,31 @@ random.seed(42)
 iterations = 1000
 
 # Train model
-validation_split = 0.2
-n_epochs = 100
+n_epochs = 500
 batch_size = 32
+patience = 50
+learning_rate = 0.0005
+validation_split = 0.2
+
+#%% Functions -----------------------------------------------------------------
+
+from scipy.ndimage import distance_transform_edt
+
+def process_mask(msk):
+    if np.max(msk) > 0:
+        labels = np.unique(msk)[1:]
+        edm = np.zeros((labels.shape[0], msk.shape[0], msk.shape[1]))
+        for l, lab in enumerate(labels):
+            tmp = msk == lab
+            tmp = distance_transform_edt(tmp)
+            pMax = np.percentile(tmp[tmp > 0], 99.9)
+            tmp[tmp > pMax] = pMax
+            tmp = (tmp / pMax)
+            edm[l,...] = tmp
+        edm = np.max(edm, axis=0).astype("float32")  
+    else:
+        edm = np.zeros_like(msk, dtype="float32")
+    return edm
 
 #%% Pre-processing ------------------------------------------------------------
 
@@ -44,6 +68,9 @@ for path in train_path.iterdir():
         # Open data
         msk = io.imread(path)
         img = io.imread(str(path).replace('_mask', ''))
+        
+        # Process mask
+        msk = process_mask(msk)
         
         # Extract patches
         img_patches.append(get_patches(img, size, overlap))
@@ -93,16 +120,16 @@ if augment:
 
 # Define & compile model
 model = sm.Unet(
-    'resnet34', 
+    'resnet18', # ResNet 18, 34, 50, 101 or 152 
     input_shape=(None, None, 1), 
     classes=1, 
     activation='sigmoid', 
     encoder_weights=None,
     )
 model.compile(
-    optimizer='adam',
+    optimizer=Adam(learning_rate=learning_rate),
     loss='binary_crossentropy', 
-    metrics=['mse']
+    metrics=['mse'],
     )
 
 # Checkpoint & callbacks
@@ -114,7 +141,7 @@ model_checkpoint_callback = ModelCheckpoint(
     save_best_only=True
     )
 callbacks = [
-    EarlyStopping(patience=20, monitor='val_loss'),
+    EarlyStopping(patience=patience, monitor='val_loss'),
     model_checkpoint_callback
     ]
 
@@ -138,3 +165,9 @@ plt.xlabel('Epochs')
 plt.ylabel('Loss')
 plt.legend()
 plt.show()
+
+# Save training history data
+train_data = pd.DataFrame(history.history)
+train_data = train_data.round(5)
+train_data.index.name = 'Epoch'
+train_data.to_csv(f"{train_type}_model_weights_{size:04d}-{overlap:04d}.csv")
