@@ -316,14 +316,14 @@ def measure(outputs, rFactor=0.5):
         "nLabel"   : [],
         "nVolume"  : [],
         "nCtrd"    : [],
-        "nMajor"   : [], 
+        "nMajor"   : [],
         "nMinor"   : [],
         "nMMRatio" : [],
         
         # Chromocenters
-        "n_cLabels"  : [], 
+        "n_cLabels"  : [],
         "n_cNumber"  : [],
-        "n_cVolume"  : [], 
+        "n_cVolume"  : [],
         "n_cnRatio"  : [],
         
         }
