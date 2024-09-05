@@ -19,8 +19,8 @@ tags_in1 = ["KZ"]; tags_out1 = []
 tags_str1 = f"{tags_in1}in_{tags_out1}out"
 
 # Plot (selection)
-plot_data = ["cEDMb"] 
-bins = 10
+plot_data = ["nVolume", "nMMRatio"] 
+bins = 25
 
 # Save
 save = True
@@ -90,8 +90,8 @@ if len(data0) == 1:
     axs[1].set_ylabel("Occurrence")
 
     # Axis limits
-    x_min = min(np.min(data0[0]), np.min(data1[0]))
-    x_max = max(np.max(data0[0]), np.max(data1[0]))
+    x_min = min(np.nanmin(data0[0]), np.nanmin(data1[0]))
+    x_max = max(np.nanmax(data0[0]), np.nanmax(data1[0]))
     y_max = max(
         np.histogram(data0[0], bins=bins)[0].max(), 
         np.histogram(data1[0], bins=bins)[0].max()
@@ -114,10 +114,10 @@ elif len(data0) == 2:
     axs[1].set_ylabel(f"{plot_data[1]}")
     
     # Axis limits
-    x_min = min(np.min(data0[0]), np.min(data1[0]))
-    x_max = max(np.max(data0[0]), np.max(data1[0]))
-    y_min = min(np.min(data0[1]), np.min(data1[1]))
-    y_max = max(np.max(data0[1]), np.max(data1[1]))
+    x_min = min(np.nanmin(data0[0]), np.nanmin(data1[0]))
+    x_max = max(np.nanmax(data0[0]), np.nanmax(data1[0]))
+    y_min = min(np.nanmin(data0[1]), np.nanmin(data1[1]))
+    y_max = max(np.nanmax(data0[1]), np.nanmax(data1[1]))
     axs[0].set_xlim([x_min, x_max])
     axs[1].set_xlim([x_min, x_max])
     axs[0].set_ylim([y_min, y_max])

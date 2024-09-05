@@ -12,7 +12,7 @@ data_path = Path("D:/local_Meschichi/data")
 # data_path = Path(r"\\scopem-idadata.ethz.ch\BDehapiot\remote_Meschichi\data")
 
 # Select (stack)
-stack_name = "KZLind3" # if batch == False 
+stack_name = "KZLind1004" # if batch == False 
 
 #%% Execute -------------------------------------------------------------------
 
