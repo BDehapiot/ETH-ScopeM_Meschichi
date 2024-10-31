@@ -9,6 +9,9 @@ from pathlib import Path
 import segmentation_models as sm
 from joblib import Parallel, delayed
 
+# bdtools
+from bdtools.norm import norm_gcn, norm_pct
+
 # Skimage
 from skimage.feature import peak_local_max
 from skimage.transform import rescale, resize
@@ -61,21 +64,30 @@ def open_stack(path, metadata=True):
 
 #%% Functions (format_stack) --------------------------------------------------
 
-def format_stack(stack, metadata, normalize=True):
+def format_stack(stack, metadata):
            
     # Rescale & reslice (isotropic voxel)
     ratio = metadata["vY"] / metadata["vZ"]
     rscale = rescale(stack, (1, ratio, ratio), order=0)
     rslice = np.swapaxes(rscale, 0, 1)
-    
-    if normalize:
-        pMax = np.percentile(rscale, 99.9)
-        rscale[rscale > pMax] = pMax
-        rslice[rslice > pMax] = pMax
-        rscale = (rscale / pMax).astype(float)
-        rslice = (rslice / pMax).astype(float)
         
     return rscale, rslice
+
+# def format_stack(stack, metadata, normalize=True):
+           
+#     # Rescale & reslice (isotropic voxel)
+#     ratio = metadata["vY"] / metadata["vZ"]
+#     rscale = rescale(stack, (1, ratio, ratio), order=0)
+#     rslice = np.swapaxes(rscale, 0, 1)
+    
+#     if normalize:       
+#         pMax = np.percentile(rscale, 99.9)
+#         rscale[rscale > pMax] = pMax
+#         rslice[rslice > pMax] = pMax
+#         rscale = (rscale / pMax).astype(float)
+#         rslice = (rslice / pMax).astype(float)
+        
+#     return rscale, rslice
 
 #%% Functions (get_patches) ---------------------------------------------------
 
