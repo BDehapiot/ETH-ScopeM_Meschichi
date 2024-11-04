@@ -5,14 +5,13 @@ import shutil
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from matplotlib import cm
 from datetime import datetime
 import matplotlib.pyplot as plt
 import segmentation_models as sm
 
 # Functions
-from bdmodel.functions import (
-    open_data, preprocess, augment, split_idx, save_val_prds
-    )
+from bdmodel.functions import get_paths, preprocess, augment
 
 # Tensorflow
 from tensorflow.keras.optimizers import Adam
@@ -23,15 +22,69 @@ from tensorflow.keras.callbacks import (
 # Matplotlib
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
+#%% Comments ------------------------------------------------------------------
+
+#%% Function(s) ---------------------------------------------------------------
+
+def split_idx(n, validation_split=0.2):
+    val_n = int(n * validation_split)
+    trn_n = n - val_n
+    idx = np.arange(n)
+    np.random.shuffle(idx)
+    trn_idx = idx[:trn_n]
+    val_idx = idx[trn_n:]
+    return trn_idx, val_idx
+
+def save_val_prds(imgs, msks, prds, save_path):
+
+    plt.ioff() # turn off inline plot
+    
+    for i in range(imgs.shape[0]):
+
+        # Initialize
+        fig, (ax0, ax1, ax2) = plt.subplots(
+            nrows=1, ncols=3, figsize=(15, 5))
+        cmap0, cmap1, cmap2 = cm.gray, cm.plasma, cm.plasma
+        shrink = 0.75
+
+        # Plot img
+        ax0.imshow(imgs[i], cmap=cmap0)
+        ax0.set_title("image")
+        ax0.set_xlabel("pixels")
+        ax0.set_ylabel("pixels")
+        fig.colorbar(
+            cm.ScalarMappable(cmap=cmap0), ax=ax0, shrink=shrink)
+
+        # Plot msk
+        ax1.imshow(msks[i], cmap=cmap1)
+        ax1.set_title("mask")
+        ax1.set_xlabel("pixels")
+        fig.colorbar(
+            cm.ScalarMappable(cmap=cmap1), ax=ax1, shrink=shrink)
+        
+        # Plot prd
+        ax2.imshow(prds[i], cmap=cmap2)
+        ax2.set_title("prediction")
+        ax2.set_xlabel("pixels")
+        fig.colorbar(
+            cm.ScalarMappable(cmap=cmap2), ax=ax2, shrink=shrink)
+        
+        plt.tight_layout()
+        
+        # Save
+        Path(save_path, "val_prds").mkdir(exist_ok=True)
+        plt.savefig(save_path / "val_prds" / f"expl_{i:02d}.png")
+        plt.close(fig)
+
 #%% Class: Train() ------------------------------------------------------------
 
 class Train:
        
     def __init__(
             self, 
-            train_path,
-            name="",
-            msk_suffix="",
+            imgs, msks,
+            save_name="",
+            save_path=Path.cwd(),
             msk_type="normal",
             img_norm="global",
             patch_size=128,
@@ -46,9 +99,10 @@ class Train:
             weights_path="",
             ):
         
-        self.train_path = train_path
-        self.name = name
-        self.msk_suffix = msk_suffix
+        self.imgs = imgs
+        self.msks = msks
+        self.save_name = save_name
+        self.save_path = save_path
         self.msk_type = msk_type
         self.img_norm = img_norm
         self.patch_size = patch_size
@@ -64,14 +118,14 @@ class Train:
         
         # Model name
         self.date = datetime.now().strftime('%Y-%m-%d_%Hh%Mm%Ss')
-        if not self.name:
-            self.name = f"model_{self.date}"
+        if not self.save_name:
+            self.save_name = f"model_{self.date}"
         else:
-            self.name = f"model_{self.name}"
+            self.save_name = f"model_{self.save_name}"
 
         # Save path
-        self.save_path = Path(Path.cwd(), self.name)
-        self.backup_path = Path(Path.cwd(), f"{self.name}_backup")
+        self.save_path = Path(Path.cwd(), self.save_name)
+        self.backup_path = Path(Path.cwd(), f"{self.save_name}_backup")
         if self.save_path.exists():
             if self.weights_path and self.weights_path.exists():
                 if self.backup_path.exists():
@@ -79,9 +133,6 @@ class Train:
                 shutil.copytree(self.save_path, self.backup_path)
             shutil.rmtree(self.save_path)
         self.save_path.mkdir(exist_ok=True)
-            
-        # Open data
-        self.imgs, self.msks = open_data(self.train_path, self.msk_suffix)
         
         # Preprocess
         self.imgs, self.msks = preprocess(
@@ -124,7 +175,7 @@ class Train:
         
         if self.weights_path:
             self.model.load_weights(
-                Path(Path.cwd(), f"{self.name}_backup", "weights.h5"))
+                Path(Path.cwd(), f"{self.save_name}_backup", "weights.h5"))
         
         self.model.compile(
             optimizer=Adam(learning_rate=self.learning_rate),
@@ -174,10 +225,9 @@ class Train:
         self.report = {
             
             # Parameters
-            "name"             : self.name,
             "date"             : self.date,
-            "path"             : self.train_path,
-            "msk_suffix"       : self.msk_suffix,
+            "save_name"        : self.save_name,
+            "save_path"        : self.save_path,
             "msk_type"         : self.msk_type,
             "img_norm"         : self.img_norm,
             "patch_size"       : self.patch_size,
@@ -220,7 +270,7 @@ class Train:
         val_prds = np.stack(self.model.predict(val_imgs).squeeze())
         save_val_prds(val_imgs, val_msks, val_prds, self.save_path)
 
-#%% Class: CustomCallback
+#%% Class: CustomCallback -----------------------------------------------------
 
 class CustomCallback(Callback):
     
@@ -258,7 +308,7 @@ class CustomCallback(Callback):
             range(1, epoch + 2), self.trn_loss, "y", label="training loss")
         self.ax.plot(
             range(1, epoch + 2), self.val_loss, "r", label="validation loss")
-        self.ax.set_title(f"{self.train.name}")
+        self.ax.set_title(f"{self.train.save_name}")
         self.ax.set_xlabel("epochs")
         self.ax.set_ylabel("loss")
         self.ax.legend(
@@ -297,9 +347,9 @@ class CustomCallback(Callback):
         
         info_path = (
             
-            f"name : {self.train.name}\n"
             f"date : {self.train.date}\n"
-            f"path : {self.train.train_path}\n"
+            f"save_name : {self.train.save_name}\n"
+            f"save_path : {self.train.save_path}\n"
             
             ) 
         
@@ -307,7 +357,6 @@ class CustomCallback(Callback):
             
             f"Parameters\n"
             f"----------\n"
-            f"msk_suffix       : {self.train.msk_suffix}\n"
             f"msk_type         : {self.train.msk_type}\n"
             f"img_norm         : {self.train.img_norm}\n"
             f"patch_size       : {self.train.patch_size}\n"
@@ -361,23 +410,41 @@ class CustomCallback(Callback):
 #%% Execute -------------------------------------------------------------------
 
 if __name__ == "__main__":
+    
+    import time
+    import napari
+    from skimage import io
+    from functions import preprocess
+    from bdtools.norm import norm_gcn, norm_pct
 
     # Paths
     train_path = Path(Path.cwd().parent, "data", "train")
-
+    
+    # Open data
+    imgs, msks = [], []
+    msk_paths = get_paths(
+        train_path, 
+        ext=".tif", 
+        tags_in=["rslice", "mask"],
+        subfolders=False,
+        )
+    for path in msk_paths:
+        imgs.append(io.imread(str(path).replace("_mask", "")))
+        msks.append(io.imread(path))
+        
     # Train
     train = Train(
-        train_path,
-        name="surface_768",
-        msk_suffix="-surface",
+        imgs, msks,
+        save_name="rslice_128",
+        save_path=Path.cwd(),
         msk_type="normal",
         img_norm="global",
-        patch_size=768,
-        patch_overlap=32,
-        nAugment=100,
+        patch_size=128,
+        patch_overlap=0,
+        nAugment=2000,
         backbone="resnet18",
         epochs=200,
-        batch_size=4,
+        batch_size=32,
         validation_split=0.2,
         learning_rate=0.0005,
         patience=30,
@@ -385,5 +452,5 @@ if __name__ == "__main__":
         # weights_path=Path(Path.cwd(), "model_normal_768", "weights.h5"),
         )
     
-    imgs = train.imgs
-    msks = train.msks
+    # imgs = train.imgs
+    # msks = train.msks
