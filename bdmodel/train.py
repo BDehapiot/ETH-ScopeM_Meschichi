@@ -124,8 +124,8 @@ class Train:
             self.save_name = f"model_{self.save_name}"
 
         # Save path
-        self.save_path = Path(Path.cwd(), self.save_name)
-        self.backup_path = Path(Path.cwd(), f"{self.save_name}_backup")
+        self.save_path = Path(self.save_path, self.save_name)
+        self.backup_path = Path(self.save_path, f"{self.save_name}_backup")
         if self.save_path.exists():
             if self.weights_path and self.weights_path.exists():
                 if self.backup_path.exists():

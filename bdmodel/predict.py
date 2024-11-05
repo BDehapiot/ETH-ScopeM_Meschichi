@@ -11,7 +11,7 @@ from bdmodel.functions import preprocess
 # bdtools
 from bdtools import merge_patches
 
-#%% Comments ------------------------------------------------------------------
+#%% Function : predict() ------------------------------------------------------
 
 def predict(
         imgs, 
@@ -66,8 +66,8 @@ def predict(
 if __name__ == "__main__":
     
     # Paths
-    # model_path = Path.cwd() / "model_mass_768"
-    model_path = Path.cwd() / "model_surface_768"
+    # model_path = Path.cwd() / "model_rscale_128"
+    model_path = Path.cwd() / "model_rslice_768"
     imgs_path = Path.cwd().parent / "data" / "train_tissue" / "240611-18_4 merged_pix(13.771)_00.tif"
     
     # Open data

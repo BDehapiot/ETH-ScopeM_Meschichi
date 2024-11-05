@@ -1,6 +1,6 @@
-date: 2024-11-04_17h20m38s
+date: 2024-11-05_09h24m30s
 save_name: model_rslice_128
-save_path: c:\users\bdeha\projects\eth-scopem_meschichi\bdmodel\model_rslice_128
+save_path: c:\users\bdeha\projects\eth-scopem_meschichi\model_rslice_128
 msk_type: normal
 img_norm: global
 patch_size: 128
@@ -13,5 +13,5 @@ batch_size: 32
 validation_split: 0.2000
 learning_rate: 0.0005
 patience: 30
-best_epoch: 30
-best_val_loss: 0.0074
+best_epoch: 38
+best_val_loss: 0.0079

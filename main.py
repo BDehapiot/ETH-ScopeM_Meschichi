@@ -1,33 +1,32 @@
 #%% Imports -------------------------------------------------------------------
 
 import time
-import napari
 from numba import cuda
-from skimage import io
 from pathlib import Path
+
+# Functions
 from functions import limit_vram, segment, measure, save, display
-
-#%% Comments ------------------------------------------------------------------
-
-'''
-- Intensity measurements normalization?
-
-'''
 
 #%% Parameters ----------------------------------------------------------------
 
 # Path
-# data_path = Path(Path.cwd(), "data", "local") 
 data_path = Path("D:/local_Meschichi/data")
 # data_path = Path(r"\\scopem-idadata.ethz.ch\BDehapiot\remote_Meschichi\data")
 
 # Batch
 batch = False
 overwrite = True
-stack_name = "KZLind3" # if batch == False 
+stack_name = "KAS_01_01" # if batch == False 
+
+# # nMask
+# lmax_dist = 5
+# lmax_prom = 0.15
+# prob_thresh = 0.25
+# clear_nBorder = True
+# min_nSize = 4096
 
 # nMask
-lmax_dist = 5
+lmax_dist = 10
 lmax_prom = 0.15
 prob_thresh = 0.25
 clear_nBorder = True
@@ -110,14 +109,14 @@ if __name__ == "__main__":
         save(path, outputs)
         t3 = time.time()
         print(f" {(t3-t2):<5.2f}s")
-
+        
 #%% Display -------------------------------------------------------------------
 
     if not batch and disp: 
 
-        # Clear VRAM
-        cuda.select_device(0)
-        cuda.close()
+        # # Clear VRAM
+        # cuda.select_device(0)
+        # cuda.close()
 
         # Display
         display(

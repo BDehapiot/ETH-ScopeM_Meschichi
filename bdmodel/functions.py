@@ -11,6 +11,7 @@ from joblib import Parallel, delayed
 from bdtools.mask import get_edt
 from bdtools.norm import norm_gcn, norm_pct
 from bdtools.patch import extract_patches
+
 # Skimage
 from skimage.segmentation import find_boundaries 
 
@@ -200,8 +201,9 @@ def preprocess(
     # Preprocess
     if msks is None:
         
-        if isinstance(imgs, np.ndarray):
-            imgs = [imgs]
+        if isinstance(imgs, np.ndarray):           
+            if imgs.ndim == 2: imgs = [imgs]
+            elif imgs.ndim == 3: imgs = list(imgs)
         
         if len(imgs) > 1:
                
@@ -209,7 +211,7 @@ def preprocess(
                 delayed(_preprocess)(img)
                 for img in imgs
                 )
-            imgs = [data[0] for data in outputs]
+            imgs = [data for data in outputs]
             imgs = np.stack([arr for sublist in imgs for arr in sublist])
                 
         else:
@@ -224,9 +226,11 @@ def preprocess(
     else:
         
         if isinstance(imgs, np.ndarray):
-            imgs = [imgs]
-        if isinstance(imgs, np.ndarray):
-            imgs = [imgs]
+            if imgs.ndim == 2: imgs = [imgs]
+            elif imgs.ndim == 3: imgs = list(imgs)
+        if isinstance(msks, np.ndarray):
+            if msks.ndim == 2: msks = [msks]
+            elif msks.ndim == 3: msks = list(msks)
         
         if len(imgs) > 1:
             
@@ -248,7 +252,7 @@ def preprocess(
         imgs = imgs.astype("float32")
         msks = msks.astype("float32")
         
-    return imgs, msks
+        return imgs, msks
     
 #%% Function: augment() -------------------------------------------------------
 

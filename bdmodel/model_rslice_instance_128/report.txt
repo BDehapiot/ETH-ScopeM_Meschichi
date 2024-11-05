@@ -1,0 +1,17 @@
+date: 2024-11-05_15h12m44s
+save_name: model_rscale_instance_128
+save_path: bdmodel\model_rscale_instance_128
+msk_type: edt
+img_norm: global
+patch_size: 128
+patch_overlap: 0
+img/patches: 344
+augmentation: 2000
+backbone: resnet18
+epochs: 200
+batch_size: 32
+validation_split: 0.2000
+learning_rate: 0.0005
+patience: 30
+best_epoch: 83
+best_val_loss: 0.0062

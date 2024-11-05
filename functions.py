@@ -12,6 +12,9 @@ from joblib import Parallel, delayed
 # bdtools
 from bdtools.norm import norm_gcn, norm_pct
 
+# bdmodel
+from bdmodel.predict import predict
+
 # Skimage
 from skimage.feature import peak_local_max
 from skimage.transform import rescale, resize
@@ -73,156 +76,6 @@ def format_stack(stack, metadata):
         
     return rscale, rslice
 
-# def format_stack(stack, metadata, normalize=True):
-           
-#     # Rescale & reslice (isotropic voxel)
-#     ratio = metadata["vY"] / metadata["vZ"]
-#     rscale = rescale(stack, (1, ratio, ratio), order=0)
-#     rslice = np.swapaxes(rscale, 0, 1)
-    
-#     if normalize:       
-#         pMax = np.percentile(rscale, 99.9)
-#         rscale[rscale > pMax] = pMax
-#         rslice[rslice > pMax] = pMax
-#         rscale = (rscale / pMax).astype(float)
-#         rslice = (rslice / pMax).astype(float)
-        
-#     return rscale, rslice
-
-#%% Functions (get_patches) ---------------------------------------------------
-
-def get_patches(arr, size, overlap):
-    
-    # Get dimensions
-    if arr.ndim == 2: nT = 1; nY, nX = arr.shape 
-    if arr.ndim == 3: nT, nY, nX = arr.shape
-    
-    # Get variables
-    y0s = np.arange(0, nY, size - overlap)
-    x0s = np.arange(0, nX, size - overlap)
-    yMax = y0s[-1] + size
-    xMax = x0s[-1] + size
-    yPad = yMax - nY
-    xPad = xMax - nX
-    yPad1, yPad2 = yPad // 2, (yPad + 1) // 2
-    xPad1, xPad2 = xPad // 2, (xPad + 1) // 2
-    
-    # Pad array
-    if arr.ndim == 2:
-        arr_pad = np.pad(
-            arr, ((yPad1, yPad2), (xPad1, xPad2)), mode='reflect') 
-    if arr.ndim == 3:
-        arr_pad = np.pad(
-            arr, ((0, 0), (yPad1, yPad2), (xPad1, xPad2)), mode='reflect')         
-    
-    # Extract patches
-    patches = []
-    if arr.ndim == 2:
-        for y0 in y0s:
-            for x0 in x0s:
-                patches.append(arr_pad[y0:y0 + size, x0:x0 + size])
-    if arr.ndim == 3:
-        for t in range(nT):
-            for y0 in y0s:
-                for x0 in x0s:
-                    patches.append(arr_pad[t, y0:y0 + size, x0:x0 + size])
-            
-    return patches
-
-#%% Functions (merge_patches) -------------------------------------------------
-
-def merge_patches(patches, shape, size, overlap):
-    
-    # Get dimensions 
-    if len(shape) == 2: nT = 1; nY, nX = shape
-    if len(shape) == 3: nT, nY, nX = shape
-    nPatch = len(patches) // nT
-
-    # Get variables
-    y0s = np.arange(0, nY, size - overlap)
-    x0s = np.arange(0, nX, size - overlap)
-    yMax = y0s[-1] + size
-    xMax = x0s[-1] + size
-    yPad = yMax - nY
-    xPad = xMax - nX
-    yPad1 = yPad // 2
-    xPad1 = xPad // 2
-
-    # Merge patches
-    def _merge_patches(patches):
-        count = 0
-        arr = np.full((2, nY + yPad, nX + xPad), np.nan)
-        for i, y0 in enumerate(y0s):
-            for j, x0 in enumerate(x0s):
-                if i % 2 == j % 2:
-                    arr[0, y0:y0 + size, x0:x0 + size] = patches[count]
-                else:
-                    arr[1, y0:y0 + size, x0:x0 + size] = patches[count]
-                count += 1 
-        arr = np.nanmean(arr, axis=0)
-        arr = arr[yPad1:yPad1 + nY, xPad1:xPad1 + nX]
-        return arr
-        
-    if len(shape) == 2:
-        arr = _merge_patches(patches)
-
-    if len(shape) == 3:
-        patches = np.stack(patches).reshape(nT, nPatch, size, size)
-        arr = Parallel(n_jobs=-1)(
-            delayed(_merge_patches)(patches[t,...])
-            for t in range(nT)
-            )
-        arr = np.stack(arr)
-        
-    return arr
-
-#%% Functions (predict) -------------------------------------------------------
-
-def predict(rscale, rslice):
-            
-    # Define & compile model
-    model = sm.Unet(
-        'resnet18', # ResNet 18, 34, 50, 101 or 152 
-        input_shape=(None, None, 1), 
-        classes=1, 
-        activation='sigmoid', 
-        encoder_weights=None,
-        )
-    model.compile(
-        optimizer='adam',
-        loss='binary_crossentropy', 
-        metrics=['mse']
-        )
-    
-    # Model paths
-    for model_path in Path.cwd().iterdir():
-        if "rscale_model_weights" in model_path.name: 
-            rscale_model_path = model_path
-        if "rslice_model_weights" in model_path.name: 
-            rslice_model_path = model_path
-
-    # Predict (rscale)
-    model.load_weights(rscale_model_path) 
-    size = int(rscale_model_path.stem.split("_")[-1].split("-")[0])
-    overlap = int(rscale_model_path.stem.split("_")[-1].split("-")[1])    
-    rscale_patches = np.stack(get_patches(rscale, size, overlap))
-    rscale_probs = model.predict(rscale_patches, verbose=0).squeeze()
-    rscale_probs = merge_patches(rscale_probs, rscale.shape, size, overlap)
-
-    # Predict & merge patches (rslice)
-    model.load_weights(rslice_model_path) 
-    size = int(rslice_model_path.stem.split("_")[-1].split("-")[0])
-    overlap = int(rslice_model_path.stem.split("_")[-1].split("-")[1])
-    rslice_patches = np.stack(get_patches(rslice, size, overlap))
-    rslice_probs = model.predict(rslice_patches, verbose=0).squeeze()
-    rslice_probs = merge_patches(rslice_probs, rslice.shape, size, overlap)
-    
-    # Merge predictions
-    rslice_probs = np.swapaxes(rslice_probs, 0, 1)
-    probs = (rscale_probs + rslice_probs) / 2
-    
-    return probs
-
 #%% Functions (segment) -------------------------------------------------------
 
 def segment(
@@ -250,16 +103,23 @@ def segment(
     rscale, rslice = format_stack(stack, metadata)
     
     # Predict
-    probs = predict(rscale, rslice)
+    rscale_prds = predict(
+        rscale, Path("bdmodel", "model_rscale_128"), patch_overlap=0)
+    rslice_prds = predict(
+        rslice, Path("bdmodel", "model_rslice_128"), patch_overlap=0)
+    
+    # Merge predictions
+    rslice_prds = np.swapaxes(rslice_prds, 0, 1)
+    prds = (rscale_prds + rslice_prds) / 2
     
     # Nuclei
     lmax = peak_local_max(
-        probs, exclude_border=False,
+        prds, exclude_border=False,
         min_distance=lmax_dist, threshold_abs=lmax_prom,
         )
-    pMask = probs > 0.4 # parameter(s)
+    pMask = prds > 0.4 # parameter(s)
     pMask = remove_small_objects(pMask, min_size=8) # parameter(s)
-    pMax = np.zeros_like(probs, dtype=int)
+    pMax = np.zeros_like(prds, dtype=int)
     pMax[(lmax[:, 0], lmax[:, 1], lmax[:, 2])] = 1
     nLabels = label(pMax)
     nLabels = expand_labels(nLabels, distance=10) 
@@ -267,7 +127,7 @@ def segment(
     nLabels = expand_labels(nLabels, distance=10)
     pMax = resize(pMax, stack.shape, order=0)
     nLabels = resize(nLabels, stack.shape, order=0)
-    nMask = resize(probs, stack.shape, order=1) > prob_thresh
+    nMask = resize(prds, stack.shape, order=1) > prob_thresh
     if clear_nBorder:
         nMask = clear_border(nMask)
     nMask = remove_small_objects(nMask, min_size=min_nSize)
@@ -295,7 +155,7 @@ def segment(
     outputs = {
         "stack"    : stack,
         "metadata" : metadata,
-        "probs"    : probs.astype("float32"),
+        "prds"     : prds.astype("float32"),
         "nLabels"  : nLabels.astype("uint16"),
         "cLabels"  : cLabels.astype("uint16"),
         "tophat"   : tophat.astype("float32"),
@@ -469,8 +329,8 @@ def save(path, outputs):
         outputs["stack"], check_contrast=False,
         )
     io.imsave(
-        save_path / f"{path.stem}_probs.tif",
-        outputs["probs"], check_contrast=False,
+        save_path / f"{path.stem}_prds.tif",
+        outputs["prds"], check_contrast=False,
         )
     io.imsave(
         save_path / f"{path.stem}_nLabels.tif",
