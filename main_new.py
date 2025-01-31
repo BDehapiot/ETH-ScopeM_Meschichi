@@ -23,7 +23,8 @@ data_path = Path("D:/local_Meschichi/data")
 # overwrite = True
 # stack_name = "FIN_01_00"
 # stack_name = "KAS_01_02"
-stack_name = "KZL_01_00"
+# stack_name = "KZL_01_00"
+stack_name = "KZL_01_03"
 
 #%% Execute -------------------------------------------------------------------
 
@@ -56,15 +57,17 @@ if __name__ == "__main__":
     prds = prds_avg - prds_std
     
     # Display
-    import napari
-    viewer = napari.Viewer()
-    viewer.add_image(rscale)
-    viewer.add_image(prds_avg)
-    viewer.add_image(prds_std)
-    viewer.add_image(prds)
+    # import napari
+    # viewer = napari.Viewer()
+    # viewer.add_image(rscale)
+    # viewer.add_image(prds_avg)
+    # viewer.add_image(prds_std)
+    # viewer.add_image(prds)
     
     # viewer.add_image(rscale)
     # viewer.add_image(rscale_prds)
     # viewer.add_image(rslice)
     # viewer.add_image(rslice_prds)
+
+
     
