@@ -263,23 +263,24 @@ def augment(imgs, msks, iterations):
         
     # Nested function(s) ------------------------------------------------------
     
-    def _augment(imgs, msks, operations):      
+    def _augment(imgs, msks):     
+        
+        operations = A.Compose([
+            A.VerticalFlip(p=0.5),              
+            A.RandomRotate90(p=0.5),
+            A.HorizontalFlip(p=0.5),
+            A.Transpose(p=0.5),
+            A.GridDistortion(p=0.5),
+            ])
+        
         idx = np.random.randint(0, len(imgs) - 1)
         outputs = operations(image=imgs[idx,...], mask=msks[idx,...])
         return outputs["image"], outputs["mask"]
     
     # Execute -----------------------------------------------------------------
     
-    operations = A.Compose([
-        A.VerticalFlip(p=0.5),              
-        A.RandomRotate90(p=0.5),
-        A.HorizontalFlip(p=0.5),
-        A.Transpose(p=0.5),
-        A.GridDistortion(p=0.5),
-        ])
-    
     outputs = Parallel(n_jobs=-1)(
-        delayed(_augment)(imgs, msks, operations)
+        delayed(_augment)(imgs, msks)
         for i in range(iterations)
         )
     imgs = np.stack([data[0] for data in outputs])

@@ -24,7 +24,8 @@ data_path = Path("D:/local_Meschichi/data")
 # stack_name = "FIN_01_00"
 # stack_name = "KAS_01_02"
 # stack_name = "KZL_01_00"
-stack_name = "KZL_01_03"
+# stack_name = "KZL_01_03"
+stack_name = "NEO_04_00"
 
 #%% Execute -------------------------------------------------------------------
 
@@ -39,15 +40,15 @@ if __name__ == "__main__":
     # Predict
     rscale_prds = predict(
         rscale, 
-        Path("bdmodel", "model_rscale_128"), 
+        Path("bdmodel", "model_rscale_128_new"), 
         img_norm="global",
-        patch_overlap=0,
+        patch_overlap=64,
         )
     rslice_prds = predict(
         rslice, 
         Path("bdmodel", "model_rslice_128"),
         img_norm="global",
-        patch_overlap=0,
+        patch_overlap=64,
         )
     
     # Merge predictions
@@ -57,12 +58,12 @@ if __name__ == "__main__":
     prds = prds_avg - prds_std
     
     # Display
-    # import napari
-    # viewer = napari.Viewer()
-    # viewer.add_image(rscale)
-    # viewer.add_image(prds_avg)
-    # viewer.add_image(prds_std)
-    # viewer.add_image(prds)
+    import napari
+    viewer = napari.Viewer()
+    viewer.add_image(rscale)
+    viewer.add_image(prds_avg)
+    viewer.add_image(prds_std)
+    viewer.add_image(prds)
     
     # viewer.add_image(rscale)
     # viewer.add_image(rscale_prds)

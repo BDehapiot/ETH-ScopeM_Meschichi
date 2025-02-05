@@ -425,7 +425,7 @@ if __name__ == "__main__":
     msk_paths = get_paths(
         train_path, 
         ext=".tif", 
-        tags_in=["rslice", "mask"],
+        tags_in=["rscale", "mask"],
         subfolders=False,
         )
     for path in msk_paths:
@@ -435,7 +435,7 @@ if __name__ == "__main__":
     # Train
     train = Train(
         imgs, msks,
-        save_name="rslice_128",
+        save_name="rscale_128_new",
         save_path=Path.cwd(),
         msk_type="normal",
         img_norm="global",
