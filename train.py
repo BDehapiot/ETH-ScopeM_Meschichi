@@ -6,23 +6,19 @@ from skimage import io
 from pathlib import Path
 
 # bdtools
-from bdtools.models.metrics import *
-from bdtools.models import preprocess, train
-
+from bdtools.models import preprocess, augment
+from bdtools.models.unet import UNet
 
 #%% Inputs --------------------------------------------------------------------
 
-# General
-target = "rscale" 
-
 # preprocess()
-patch_size = 128
+patch_size = 256
 patch_overlap = 0
 img_norm = "global"
 msk_type = "edt"
 
 # UNet build()
-save_name = f"{target}"
+save_name = f"{patch_size}_{msk_type}"
 backbone = "resnet18"
 activation = "sigmoid"
 downscale_steps = 1
@@ -39,28 +35,19 @@ patience = 20
 
 train_path = Path("data", "train")
 
-#%% Eimgsecute -------------------------------------------------------------------
+#%% Execute -------------------------------------------------------------------
 
 if __name__ == "__main__":
     
     # Load data
     imgs, msks = [], []
-    for path in list(train_path.glob(f"*{target}*")):
-        if not "mask" in path.name:
-            imgs.append(io.imread(path))
-        else:
-            msks.append(io.imread(path))
+    for path in list(train_path.glob("*.tif")):
+        if "mask" in path.name:
+            msks.append(io.imread(path))   
+            imgs.append(io.imread(str(path).replace("_mask", "")))
     imgs = np.stack(imgs)
     msks = np.stack(msks)
-    
-    # Remove empty masks
-    valid = []
-    for i in range(len(imgs)):
-        if np.max(msks[i, ...]) > 0:
-            valid.append(i)
-    imgs = imgs[valid]
-    msks = msks[valid]
-          
+     
     # Preprocess
     imgs, msks = preprocess(
         imgs, msks=msks, 
@@ -69,6 +56,17 @@ if __name__ == "__main__":
         img_norm=img_norm,
         msk_type=msk_type,
         )
+        
+    # # Augment
+    # imgs, msks = augment(
+    #     imgs, msks, 5000, 
+    #     gamma_p=0.0, gblur_p=0.0, noise_p=0.0, flip_p=0.5, distord_p=0.5
+    #     )
+    
+    # # Display
+    # viewer = napari.Viewer()
+    # viewer.add_image(imgs)
+    # viewer.add_image(msks)
     
     # Train
     unet = UNet(
@@ -88,10 +86,3 @@ if __name__ == "__main__":
         learning_rate=learning_rate,
         patience=patience,
         )
-    
-    # Display
-    viewer = napari.Viewer()
-    viewer.add_image(imgs)
-    viewer.add_image(msks)
-    
-    pass
