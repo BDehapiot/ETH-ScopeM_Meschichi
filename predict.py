@@ -1,17 +1,15 @@
 #%% Imports -------------------------------------------------------------------
 
 import os
+import nd2
 import time
-import shutil
 import pickle
 import numpy as np
 import pandas as pd
 from skimage import io
 from pathlib import Path
+import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
-
-# functions
-from functions import open_stack
 
 # bdtools
 from bdtools.nan import nan_filt
@@ -38,7 +36,7 @@ from napari.layers.labels.labels import Labels
 # Qt
 from qtpy.QtGui import QFont
 from qtpy.QtWidgets import (
-    QPushButton, QRadioButton, 
+    QPushButton, QRadioButton, QLineEdit,
     QGroupBox, QVBoxLayout, QHBoxLayout, 
     QWidget, QLabel
     )
@@ -76,6 +74,25 @@ model_name = "model_512_edt_5000-1700_2_34"
 paths = list(data_path.glob("*.nd2"))
 
 #%% Function(s) ---------------------------------------------------------------
+
+def open_stack(path, metadata=True):
+    
+    # Read nd2 file
+    with nd2.ND2File(path) as ndfile:
+        stack = ndfile.asarray()
+        nZ, nY, nX = stack.shape
+        vY, vX, vZ = ndfile.voxel_size()
+    
+    if metadata:
+        
+        metadata = {
+            "nZ" : nZ, "nY" : nY, "nX" : nX, 
+            "vZ" : vZ, "vY" : vY, "vX" : vX,
+            }
+    
+        return stack, metadata
+    
+    return stack
 
 def iso_downscale(stk, metadata, df=1, order=0):
     zy_ratio = metadata["vZ"] / metadata["vY"]
@@ -227,14 +244,14 @@ def analyse(path, df=1):
         
     # Initialize
     voxSize = metadata["vY"] * df
-    tag, sample, position = tuple(path.stem.split("_"))
+    typ, sample, position = tuple(path.stem.split("_"))
         
     # nData -------------------------------------------------------------------
     
     nData = {
         
         # Info
-        "tag"      : [],
+        "type"     : [],
         "sample"   : [],
         "position" : [],
         
@@ -257,7 +274,7 @@ def analyse(path, df=1):
     for nProps in regionprops(nLabels):
         
         # Info
-        nData["tag"].append(tag)
+        nData["type"].append(typ)
         nData["sample"].append(sample)
         nData["position"].append(position)
         
@@ -312,7 +329,7 @@ def analyse(path, df=1):
     cData = {
         
         # Info
-        "tag"      : [],
+        "type"     : [],
         "sample"   : [],
         "position" : [],
         
@@ -335,7 +352,7 @@ def analyse(path, df=1):
     for cProps in regionprops(cLabels, intensity_image=stk):
         
         # Info
-        cData["tag"].append(tag)
+        cData["type"].append(typ)
         cData["sample"].append(sample)
         cData["position"].append(position)
         
@@ -368,11 +385,11 @@ def analyse(path, df=1):
     
     # Save --------------------------------------------------------------------
 
-    # Correct centroids
-    for i, nCtrd in enumerate(nData["nCtrd"]):
-        nData["nCtrd"][i] = [int(c * df) for c in nCtrd]
-    for i, cCtrd in enumerate(cData["cCtrd"]):
-        cData["cCtrd"][i] = [int(c * df) for c in cCtrd]
+    # # Correct centroids
+    # for i, nCtrd in enumerate(nData["nCtrd"]):
+    #     nData["nCtrd"][i] = [int(c * df) for c in nCtrd]
+    # for i, cCtrd in enumerate(cData["cCtrd"]):
+    #     cData["cCtrd"][i] = [int(c * df) for c in cCtrd]
     
     # Dataframes
     pd.DataFrame(nData).to_csv(
@@ -474,17 +491,58 @@ def results(paths, df=df):
     
     # Save
     pd.DataFrame(nData).to_csv(
-        data_path / f"Merged_df{df}_nData.csv", index=False, float_format='%.3f')
+        data_path / f"_df{df}_nData_merged.csv", index=False, float_format='%.3f')
     pd.DataFrame(cData).to_csv(
-        data_path / f"Merged_df{df}_cData.csv", index=False, float_format='%.3f')
+        data_path / f"_df{df}_cData_merged.csv", index=False, float_format='%.3f')
 
 #%% Function : plot() ---------------------------------------------------------
 
-def plot():
+def plot(df=df):
     
     # Load data 
-    nData = pd.read_csv(data_path / f"Merged_df{df}_nData.csv")
-    cData = pd.read_csv(data_path / f"Merged_df{df}_cData.csv")
+    nData = pd.read_csv(data_path / f"_df{df}_nData_merged.csv")
+    cData = pd.read_csv(data_path / f"_df{df}_cData_merged.csv")
+        
+    # Initialize
+    measures = ["nVolume", "nMMRatio"]
+    nM = len(measures)
+    types = np.unique(nData["type"])
+    nT = len(types)
+    
+    # Plot
+    fig, axes = plt.subplots(nM, 1, figsize=(8, 3 * nM))
+    
+    for m, measure in enumerate(measures):
+
+        for t, typ in enumerate(types):
+            
+            # data
+            data = np.array(nData.loc[nData["type"] == typ, [measure]])
+            avg = np.nanmean(data)
+            std = np.nanstd(data)
+            sem = std  / np.sqrt(len(data))
+            n = len(data)
+            
+            # bars
+            axes[m].bar(
+                t, avg, 
+                yerr=sem, capsize=5,
+                color="lightgray", alpha=1, label=typ,
+                )
+            
+            # text
+            axes[m].text(
+                (t + 0.5) / nT, 0.05, f"{n}", size=10, color="k",
+                transform=axes[m].transAxes, ha="center", va="center",
+                )
+            
+            # titles & axis
+            axes[m].set_title(measure)
+            axes[m].set_xlim(-0.5, nT - 0.5)
+            axes[m].set_xticks(np.arange(nT))
+            axes[m].set_xticklabels(types, rotation=90)
+            
+    plt.tight_layout()
 
 #%% Class : display() ---------------------------------------------------------
 
@@ -549,11 +607,15 @@ class Display:
         stk_group_layout = QVBoxLayout()
         self.btn_next_image = QPushButton("Next Image")
         self.btn_prev_image = QPushButton("Previous Image")
+        self.dia_cytotype = QLineEdit()
+        self.dia_cytotype.setPlaceholderText("specify cytotype")
         stk_group_layout.addWidget(self.btn_next_image)
         stk_group_layout.addWidget(self.btn_prev_image)
+        stk_group_layout.addWidget(self.dia_cytotype)
         self.stk_group_box.setLayout(stk_group_layout)
-        self.btn_next_image.clicked.connect(self.next_image)
-        self.btn_prev_image.clicked.connect(self.prev_image)
+        self.btn_next_image.clicked.connect(self.next_stack)
+        self.btn_prev_image.clicked.connect(self.prev_stack)
+        self.dia_cytotype.textChanged.connect(self.select_cytotype)
         
         # Create "display" menu
         self.dsp_group_box = QGroupBox("Display")
@@ -572,7 +634,8 @@ class Display:
             lambda checked: self.show_labels() if checked else None)
         self.rad_predictions.toggled.connect(
             lambda checked: self.show_predictions() if checked else None)
-                
+        
+
         # Create texts
         self.info_image = QLabel()
         self.info_image.setFont(QFont("Consolas"))
@@ -604,11 +667,11 @@ class Display:
         
         @self.viewer.bind_key("PageDown", overwrite=True)
         def previous_image_key(viewer):
-            self.prev_image()
+            self.prev_stack()
         
         @self.viewer.bind_key("PageUp", overwrite=True)
         def next_image_key(viewer):
-            self.next_image()
+            self.next_stack()
         
         @Labels.bind_key("Enter", overwrite=True)
         def toogle_lm_key(viewer):
@@ -617,38 +680,45 @@ class Display:
             else:
                 self.show_layers()
                 
+    def update_stack(self):
+        self.viewer.layers["stack"].data = self.stk
+        self.viewer.layers["predictions"].data = self.prd
+        if self.rad_mask.isChecked():
+            self.show_masks()
+        if self.rad_labels.isChecked():
+            self.show_labels()
+        if self.rad_predictions.isChecked():
+            self.show_predictions()
+                
     def update_txt(self):
         self.info_image.setText(
             f"{self.paths[self.idx].stem}"
             )
                 
-    def next_image(self):
+    def next_stack(self):
         if self.idx < len(self.paths):
             self.idx += 1
             self.init_data()
+            self.update_stack()
             self.update_txt()
-            self.viewer.layers["stack"].data = self.stk
-            self.viewer.layers["predictions"].data = self.prd
-            if self.rad_mask.isChecked():
-                self.show_masks()
-            if self.rad_labels.isChecked():
-                self.show_labels()
-            if self.rad_predictions.isChecked():
-                self.show_predictions()
             
-    def prev_image(self):
+    def prev_stack(self):
         if self.idx > 0:
             self.idx -= 1
             self.init_data()
+            self.update_stack()
             self.update_txt()
-            self.viewer.layers["stack"].data = self.stk
-            self.viewer.layers["predictions"].data = self.prd
-            if self.rad_mask.isChecked():
-                self.show_masks()
-            if self.rad_labels.isChecked():
-                self.show_labels()
-            if self.rad_predictions.isChecked():
-                self.show_predictions()
+                
+    def select_cytotype(self):
+        cytotype = self.dia_cytotype.text()
+        if len(cytotype) == 3:
+            for i, path in enumerate(self.paths):
+                if path.stem[:3] == cytotype:
+                    self.idx = i
+                    self.init_data()
+                    self.update_stack()
+                    self.update_txt()
+                    break
                 
     def show_masks(self):
         self.viewer.layers["nuclei"].visible = True
@@ -689,8 +759,8 @@ class Display:
 
 if __name__ == "__main__":
     main(paths)
-    # results(paths)
-    # plot()
+    results(paths)
+    plot()
     Display(paths)
     
     

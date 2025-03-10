@@ -122,6 +122,13 @@ Your prompt should now start with `(Meschichi)` instead of `(base)`
 ```
 
 ## Comments
+### Meeting 10/03/2025
+New procedure to cope with variety of nuclei aspect/shape
+- Quantifications
+    - Save tophat?
+    - Measure Nuclei/chromocenter fluo int and sd, normalization?
+    - Correct "smiring" deep nuclei
+
 ### Meeting 24/05/2024
 - Quantifications    
     - number of chromocenters (**done**)
