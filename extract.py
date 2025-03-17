@@ -16,8 +16,9 @@ nPlane = 2
 #%% Initialize ----------------------------------------------------------------
 
 # Paths
-data_path = Path("D:/local_Meschichi/data")
-train_path = Path(Path.cwd(), 'data', 'train') 
+# data_path = Path("D:/local_Meschichi/data")
+data_path = Path(r"\\scopem-idadata.ethz.ch\BDehapiot\remote_Meschichi\data")
+train_path = Path(Path.cwd(), "data", "train") 
 
 #%% Extract -------------------------------------------------------------------
 
