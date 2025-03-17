@@ -759,50 +759,109 @@ class Display:
         
 #%% Execute -------------------------------------------------------------------
 
-if __name__ == "__main__":
-    main(paths)
-    results(paths)
-    plot()
-    Display(paths)
+# if __name__ == "__main__":
+#     main(paths)
+#     results(paths)
+#     plot()
+#     Display(paths)
     
 #%% Tests ---------------------------------------------------------------------
 
-# def image_correlation(img0, img1):
-#     img0_flat = norm_pct(img0).ravel()
-#     img1_flat = norm_pct(img1).ravel()
-#     return np.corrcoef(img0_flat, img1_flat)[0, 1]
+def detect_stable_slices(
+        arr, 
+        winsize=10, 
+        crr_thresh=0.98, 
+        grd_thresh=0.002, 
+        plot=False
+        ):
+    
+    global crr_valid, grd_valid, valid
+    
+    def image_correlation(arr0, arr1):
+        arr0_flat = norm_pct(arr0).ravel()
+        arr1_flat = norm_pct(arr1).ravel()
+        return np.corrcoef(arr0_flat, arr1_flat)[0, 1]
+    
+    # Image correlation
+    crr = []
+    for z in range(wsize, stk.shape[0]):
+        crr.append(image_correlation(stk[z - wsize, ...], stk[z, ...]))
+    crr = np.stack(crr)
+    grd = np.gradient(crr)
+    
+    # Detect valid idxs
+    crr_valid = np.where(crr > crr_thresh)[0]
+    # grd_valid = np.where((grd >= -grd_thresh) & (grd <= grd_thresh))[0]
+    # valid = np.intersect1d(crr_valid, grd_valid)
+    
+    if plot:
+        
+        fig, axes = plt.subplots(2, 1, figsize=(5, 5), sharex=True)    
+        
+        axes[0].plot(crr, color="gray", linewidth=3)
+        axes[0].axhline(y=crr_thresh, color="k", linestyle=":", linewidth=1)
+        axes[1].plot(grd, color="gray", linewidth=3)
+        axes[1].axhline(y=grd_thresh, color="k", linestyle=":", linewidth=1)
+        axes[1].axhline(y=-grd_thresh, color="k", linestyle=":", linewidth=1)
+        
+        for idx in crr_valid:
+            axes[0].axvspan(
+                idx - 0.5, idx + 0.5, 
+                ymin=0, ymax=1, facecolor="gray", alpha=0.1
+                )
+        for idx in grd_valid:
+            axes[1].axvspan(
+                idx - 0.5, idx + 0.5, 
+                ymin=0, ymax=1, facecolor="gray", alpha=0.1
+                )
+        for idx in valid:
+            axes[0].axvspan(
+                idx - 0.5, idx + 0.5, 
+                ymin=0, ymax=0.05, facecolor="red", alpha=0.5
+                )
+            axes[1].axvspan(
+                idx - 0.5, idx + 0.5, 
+                ymin=0, ymax=0.05, facecolor="red", alpha=0.5
+                )
 
-# # Load data
-# name = "MIE_03_02"
-# for path in paths:
-#     if path.stem == name:
+        # Axes
+        y_low, y_high, y_step = 0.5, 1.05, 0.05
+        axes[0].set_xlim(0, len(crr))
+        axes[0].set_ylim(y_low, y_high)
+        axes[0].set_yticks(np.arange(y_low, y_high, y_step))
+        axes[0].grid(True, alpha=0.5)
         
-#         # Parameters
-#         wsize = 5
+        y_low, y_high, y_step = -0.05, 0.05, 0.01
+        axes[1].set_xlim(0, len(crr))
+        axes[1].set_ylim(y_low, y_high)
+        axes[1].set_yticks(np.arange(y_low, y_high, y_step))
+        axes[1].grid(True, alpha=0.5)
+
+        plt.tight_layout()
+        plt.show()
         
-#         # Load data
-#         dir_path = data_path / path.stem
-#         stk = io.imread(dir_path / (path.stem + f"_df{df}_stack.tif"))
+# Inputs
+name = "SBG_01_04"
+wsize = 5
+idxs = random_unique_ints = np.random.choice(
+    len(paths), size=len(paths), replace=False)
+
+for idx in idxs:
+                
+    # Load data
+    path = paths[idx]
+    dir_path = data_path / path.stem
+    stk = io.imread(dir_path / (path.stem + f"_df{df}_stack.tif"))
+    
+    # Detect stable slices
+    detect_stable_slices(stk, plot=True)
+    
+    # Ask user whether to continue
+    user_input = input("Press Enter to continue or type 'q' to quit: ")
+    if user_input.lower() == "q":
+        print("Loop stopped by user.")
+        break
         
-#         # Image correlation
-#         corr = []
-#         for z in range(wsize, stk.shape[0]):
-#             corr.append(image_correlation(stk[z - wsize, ...], stk[z, ...]))
-#         corr_grd = np.gradient(corr)
-        
-#         # Plot
-#         fig, axes = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
-        
-#         # Plot correlation
-#         axes[0].plot(corr, color="k")
-        
-#         # Plot gradient of correlation
-#         axes[1].plot(corr_grd, color="r")
-        
-#         # Show plot
-#         plt.tight_layout()
-#         plt.show()
-        
-#         # Display
-#         viewer = napari.Viewer()
-#         viewer.add_image(stk)
+    # # Display
+    # viewer = napari.Viewer()
+    # viewer.add_image(stk)

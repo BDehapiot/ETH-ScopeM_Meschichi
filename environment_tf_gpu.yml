@@ -26,7 +26,7 @@ dependencies:
   - cudnn=8.1
   - pip:
     # pip_core
-    - bd-tools==0.2.2
+    - bd-tools==0.3.9
     # pip_spec
     # pip_tf_gpu
     - albumentations
